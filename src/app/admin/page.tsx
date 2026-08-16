@@ -94,7 +94,10 @@ export default function AdminPage() {
             </span>
           </div>
           <button
-            onClick={() => router.push('/')}
+            onClick={() => {
+              store.setRole('CUSTOMER');
+              router.push('/');
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back to Home
