@@ -210,3 +210,11 @@ export interface ChatMessage {
 }
 
 export type AppViewRole = 'CUSTOMER' | 'ADMIN' | 'KITCHEN' | 'SCANNER';
+
+export interface PortalUser {
+  id: string;
+  name: string;
+  email: string;
+  passwordHash: string;
+  role: 'ADMIN' | 'KITCHEN' | 'SCANNER';
+}

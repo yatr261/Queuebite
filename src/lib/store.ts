@@ -12,6 +12,7 @@ import {
   PreOrderItem,
   TableSection,
   Table,
+  PortalUser,
 } from './types';
 import {
   INITIAL_RESTAURANTS,
@@ -53,6 +54,8 @@ export interface AppState {
   selectedBookingForModify: Reservation | null;
   selectedBookingForCancel: Reservation | null;
   activeWaitlistModal: boolean;
+  users: PortalUser[];
+  currentUser: PortalUser | null;
 }
 
 const DEFAULT_STATE: AppState = {
@@ -81,6 +84,16 @@ const DEFAULT_STATE: AppState = {
   selectedBookingForModify: null,
   selectedBookingForCancel: null,
   activeWaitlistModal: false,
+  users: [
+    {
+      id: 'user-default-admin',
+      name: 'System Admin',
+      email: 'admin@queuebite.com',
+      passwordHash: 'admin123',
+      role: 'ADMIN',
+    },
+  ],
+  currentUser: null,
 };
 
 type Listener = () => void;
@@ -110,6 +123,7 @@ class StateStore {
           kitchenTickets: parsed.kitchenTickets || INITIAL_KITCHEN_TICKETS,
           waitlist: parsed.waitlist || INITIAL_WAITLIST,
           notifications: parsed.notifications || INITIAL_NOTIFICATIONS,
+          users: parsed.users || DEFAULT_STATE.users,
         };
       }
     } catch {
@@ -131,6 +145,7 @@ class StateStore {
           notifications: this.state.notifications,
           chatMessages: this.state.chatMessages,
           currentRole: this.state.currentRole,
+          users: this.state.users,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
       } catch {
@@ -171,6 +186,19 @@ class StateStore {
   // --- Role & Modal Actions ---
   public setRole(role: AppViewRole) {
     this.state = { ...this.state, currentRole: role };
+    this.notify();
+  }
+
+  public registerUser(user: PortalUser) {
+    this.state = {
+      ...this.state,
+      users: [...this.state.users, user],
+    };
+    this.notify();
+  }
+
+  public setCurrentUser(user: PortalUser | null) {
+    this.state = { ...this.state, currentUser: user };
     this.notify();
   }
 
