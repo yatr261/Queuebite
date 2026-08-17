@@ -1,4 +1,5 @@
 import { Restaurant, Table, MenuItem, Reservation, QueueToken, WaitlistEntry, KitchenTicket, NotificationItem } from './types';
+import { getTodayDateString } from './utils';
 
 export const INITIAL_TABLES: Table[] = [
   {
@@ -466,7 +467,7 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
     restaurantName: 'Spice Garden',
     tableId: 'tbl-3',
     tableNumber: 'T-3',
-    date: '2026-08-16',
+    date: getTodayDateString(),
     startTime: '19:30',
     endTime: '21:00',
     guestCount: 4,
@@ -502,7 +503,7 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
     restaurantName: 'Spice Garden',
     tableId: 'tbl-8',
     tableNumber: 'T-8',
-    date: '2026-08-16',
+    date: getTodayDateString(),
     startTime: '20:00',
     endTime: '21:30',
     guestCount: 2,
@@ -536,7 +537,7 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
     restaurantName: 'Spice Garden',
     tableId: 'tbl-4',
     tableNumber: 'T-4',
-    date: '2026-08-16',
+    date: getTodayDateString(),
     startTime: '13:00',
     endTime: '14:30',
     guestCount: 4,
@@ -601,7 +602,7 @@ export const INITIAL_WAITLIST: WaitlistEntry[] = [
     customerPhone: '+91 98220 33445',
     customerEmail: 'sanjay.d@example.com',
     guestCount: 6,
-    preferredDate: '2026-08-16',
+    preferredDate: getTodayDateString(),
     preferredTime: '20:30',
     tablePreference: 'OUTDOOR',
     status: 'WAITING',

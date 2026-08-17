@@ -83,18 +83,14 @@ export default function AdminPage() {
 
   // If role is switched back to CUSTOMER, redirect to homepage /
   useEffect(() => {
-    if (isAuthenticated && state.currentRole === 'CUSTOMER') {
-      // Clear session auth
-      sessionStorage.removeItem('queuebite_admin_auth');
-      sessionStorage.removeItem('queuebite_active_user');
-      store.setCurrentUser(null);
+    if (state.currentRole === 'CUSTOMER') {
       router.push('/');
     }
-  }, [state.currentRole, isAuthenticated, router]);
+  }, [state.currentRole, router]);
 
-  // Normalize role to current authenticated user's role if they are in `/admin`
+  // Normalize role to current authenticated user's role if they are in `/admin` (unless switching to customer)
   useEffect(() => {
-    if (isAuthenticated && currentUser && state.currentRole !== currentUser.role) {
+    if (isAuthenticated && currentUser && state.currentRole !== currentUser.role && state.currentRole !== 'CUSTOMER') {
       store.setRole(currentUser.role);
     }
   }, [isAuthenticated, currentUser, state.currentRole]);
@@ -383,6 +379,41 @@ export default function AdminPage() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-6">
         
+        {/* Staff Session Header */}
+        <div className="flex flex-col sm:flex-row items-center justify-between p-4 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20 font-bold text-sm">
+              {currentUser?.name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-zinc-900 dark:text-white">{currentUser?.name}</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-black text-zinc-500 uppercase tracking-wider border border-zinc-200 dark:border-zinc-700">
+                  {currentUser?.role}
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                Staff Authentication Active • ID: {currentUser?.id}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              sessionStorage.removeItem('queuebite_admin_auth');
+              sessionStorage.removeItem('queuebite_active_user');
+              store.setCurrentUser(null);
+              store.setRole('CUSTOMER');
+              setIsAuthenticated(false);
+              setCurrentUser(null);
+              router.push('/');
+            }}
+            className="w-full sm:w-auto px-4 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold transition-all border border-rose-500/20 cursor-pointer text-center"
+          >
+            Sign Out Session
+          </button>
+        </div>
+
         {/* Render Tab Switcher ONLY for Admin Role */}
         {isAdmin && (
           <div className="flex justify-center">

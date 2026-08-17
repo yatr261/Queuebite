@@ -1,4 +1,4 @@
-- [x] Create `/admin` page file (`src/app/admin/page.tsx`) with password lock screen and synced layout rendering
-- [x] Modify main homepage (`src/app/page.tsx`) to remove inline Admin view and handle automated redirection to `/admin`
-- [x] Add discrete "Admin Portal" link to the global Footer (`src/components/layout/Footer.tsx`)
-- [ ] Verify everything works perfectly and compiles cleanly without errors
+- [x] Make mock data dates dynamic in `src/lib/mockData.ts`
+- [x] Fix homepage redirection logic in `src/app/page.tsx`
+- [x] Implement staff session header and fix redirection in `src/app/admin/page.tsx`
+- [x] Run build and verify correctness

@@ -27,17 +27,11 @@ export default function Home() {
     });
   }, []);
 
-  // Redirect to /admin if current role is ADMIN, KITCHEN, or SCANNER (only if authenticated)
+  // Redirect to /admin if current role is ADMIN, KITCHEN, or SCANNER
   useEffect(() => {
     const isStaff = state.currentRole === 'ADMIN' || state.currentRole === 'KITCHEN' || state.currentRole === 'SCANNER';
     if (isStaff) {
-      const auth = sessionStorage.getItem('queuebite_admin_auth');
-      if (auth === 'true') {
-        router.push('/admin');
-      } else {
-        // Reset to CUSTOMER role for non-authenticated visitors
-        store.setRole('CUSTOMER');
-      }
+      router.push('/admin');
     }
   }, [state.currentRole, router]);
 
