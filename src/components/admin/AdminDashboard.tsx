@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { store, AppState } from '@/lib/store';
-import { Reservation, Table, QueueToken } from '@/lib/types';
+import { Reservation, Table, QueueToken, PortalUser, JobRole } from '@/lib/types';
 import { formatDate, formatTime12h, formatCurrency, getTodayDateString } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -23,11 +23,17 @@ import {
   ChefHat,
   Sparkles,
   Ticket,
+  Plus,
+  Trash2,
+  Edit2,
+  UserPlus,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [state, setState] = React.useState<AppState>(store.getState());
-  const [adminTab, setAdminTab] = useState<'OVERVIEW' | 'RESERVATIONS' | 'FLOOR_PLAN' | 'TIMELINE' | 'QUEUE' | 'SETTINGS'>('OVERVIEW');
+  const [adminTab, setAdminTab] = useState<'OVERVIEW' | 'RESERVATIONS' | 'FLOOR_PLAN' | 'TIMELINE' | 'QUEUE' | 'SETTINGS' | 'STAFF'>('OVERVIEW');
   const [resFilter, setResFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -39,6 +45,10 @@ export default function AdminDashboard() {
 
   const restaurant =
     state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
+
+  const currentUserRoleObj = state.jobRoles?.find((r) => r.code === state.currentUser?.role);
+  const userPermissions = currentUserRoleObj?.permissions || [];
+  const canManageStaff = userPermissions.includes('STAFF_MANAGEMENT') || state.currentUser?.role === 'ADMIN';
 
   // Key Analytics KPIs
   const totalReservations = state.reservations.length;
@@ -101,19 +111,20 @@ export default function AdminDashboard() {
       {/* Admin Sub-Navigation */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-zinc-200 dark:border-zinc-800">
         {[
-          { id: 'OVERVIEW', label: 'Overview Analytics', icon: TrendingUp },
-          { id: 'RESERVATIONS', label: `Reservations (${state.reservations.length})`, icon: Calendar },
-          { id: 'FLOOR_PLAN', label: 'Visual Floor Plan', icon: Grid },
-          { id: 'TIMELINE', label: 'Table Timeline Matrix', icon: Clock },
-          { id: 'QUEUE', label: `Live Queue (${activeWalkinQueueCount})`, icon: Ticket },
-          { id: 'SETTINGS', label: 'Restaurant Settings', icon: Settings },
-        ].map((tab) => {
+          { id: 'OVERVIEW', label: 'Overview Analytics', icon: TrendingUp, show: true },
+          { id: 'RESERVATIONS', label: `Reservations (${state.reservations.length})`, icon: Calendar, show: true },
+          { id: 'FLOOR_PLAN', label: 'Visual Floor Plan', icon: Grid, show: true },
+          { id: 'TIMELINE', label: 'Table Timeline Matrix', icon: Clock, show: true },
+          { id: 'QUEUE', label: `Live Queue (${activeWalkinQueueCount})`, icon: Ticket, show: true },
+          { id: 'SETTINGS', label: 'Restaurant Settings', icon: Settings, show: true },
+          { id: 'STAFF', label: 'Staff & Roles', icon: Users, show: canManageStaff },
+        ].filter(t => t.show).map((tab) => {
           const Icon = tab.icon;
           const isSelected = adminTab === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setAdminTab(tab.id as 'OVERVIEW' | 'RESERVATIONS' | 'FLOOR_PLAN' | 'TIMELINE' | 'QUEUE' | 'SETTINGS')}
+              onClick={() => setAdminTab(tab.id as any)}
               className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 isSelected
                   ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
@@ -643,6 +654,676 @@ export default function AdminDashboard() {
                 {restaurant.cleaningBufferMinutes} Minutes
               </span>
             </div>
+          </div>
+        </div>
+      )}
+      {/* TAB 7: STAFF & ROLES MANAGEMENT */}
+      {adminTab === 'STAFF' && canManageStaff && (
+        <StaffManagementView state={state} />
+      )}
+    </div>
+  );
+}
+
+function StaffManagementView({ state }: { state: AppState }) {
+  const [subTab, setSubTab] = useState<'STAFF' | 'ROLES'>('STAFF');
+  const [staffSearch, setStaffSearch] = useState('');
+  
+  // Staff Modal Form state
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<PortalUser | null>(null);
+  const [staffName, setStaffName] = useState('');
+  const [staffEmail, setStaffEmail] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
+  const [staffRole, setStaffRole] = useState('ADMIN');
+  const [showStaffPasswordMap, setShowStaffPasswordMap] = useState<Record<string, boolean>>({});
+
+  // Role Modal Form state
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<JobRole | null>(null);
+  const [roleName, setRoleName] = useState('');
+  const [roleCode, setRoleCode] = useState('');
+  const [roleDescription, setRoleDescription] = useState('');
+  const [rolePermissions, setRolePermissions] = useState<('DASHBOARD' | 'KITCHEN' | 'SCANNER' | 'STAFF_MANAGEMENT')[]>([]);
+
+  // Messages
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const triggerSuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 4000);
+  };
+
+  const triggerError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(null), 4000);
+  };
+
+  // Staff Save handler
+  const handleSaveStaff = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staffName.trim() || !staffEmail.trim() || !staffPassword.trim()) {
+      triggerError('Please fill out all fields.');
+      return;
+    }
+
+    if (editingStaff) {
+      // Check email uniqueness among other users
+      const exists = state.users.some(u => u.email.toLowerCase() === staffEmail.toLowerCase() && u.id !== editingStaff.id);
+      if (exists) {
+        triggerError('A staff member with this email already exists.');
+        return;
+      }
+
+      store.updateStaff(editingStaff.id, {
+        name: staffName.trim(),
+        email: staffEmail.trim(),
+        passwordHash: staffPassword,
+        role: staffRole,
+      });
+      triggerSuccess('Staff member updated successfully!');
+    } else {
+      // Check email uniqueness
+      const exists = state.users.some(u => u.email.toLowerCase() === staffEmail.toLowerCase());
+      if (exists) {
+        triggerError('A staff member with this email already exists.');
+        return;
+      }
+
+      const newStaff: PortalUser = {
+        id: `usr-${Date.now()}`,
+        name: staffName.trim(),
+        email: staffEmail.trim(),
+        passwordHash: staffPassword,
+        role: staffRole,
+      };
+      store.addStaff(newStaff);
+      triggerSuccess('New staff member added successfully!');
+    }
+
+    setIsStaffModalOpen(false);
+    resetStaffForm();
+  };
+
+  const resetStaffForm = () => {
+    setEditingStaff(null);
+    setStaffName('');
+    setStaffEmail('');
+    setStaffPassword('');
+    setStaffRole(state.jobRoles[0]?.code || 'ADMIN');
+  };
+
+  const handleEditStaff = (staff: PortalUser) => {
+    setEditingStaff(staff);
+    setStaffName(staff.name);
+    setStaffEmail(staff.email);
+    setStaffPassword(staff.passwordHash);
+    setStaffRole(staff.role);
+    setIsStaffModalOpen(true);
+  };
+
+  const handleDeleteStaff = (staffId: string) => {
+    if (staffId === 'user-default-admin' || staffId === state.currentUser?.id) {
+      triggerError('You cannot delete the primary admin account or your own active session account.');
+      return;
+    }
+    if (confirm('Are you sure you want to remove this staff member?')) {
+      store.deleteStaff(staffId);
+      triggerSuccess('Staff member removed successfully.');
+    }
+  };
+
+  // Role Save handler
+  const handleSaveRole = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleName.trim() || !roleCode.trim() || !roleDescription.trim()) {
+      triggerError('Please fill out all fields.');
+      return;
+    }
+
+    const cleanCode = roleCode.trim().toUpperCase().replace(/\s+/g, '_');
+
+    if (editingRole) {
+      // Lock core roles
+      if (['role-admin', 'role-kitchen', 'role-scanner'].includes(editingRole.id) || ['ADMIN', 'KITCHEN', 'SCANNER'].includes(editingRole.code)) {
+        triggerError('Core system roles cannot be modified.');
+        return;
+      }
+
+      store.updateJobRole(editingRole.id, {
+        name: roleName.trim(),
+        code: cleanCode,
+        description: roleDescription.trim(),
+        permissions: rolePermissions,
+      });
+      triggerSuccess('Job role updated successfully!');
+    } else {
+      // Check code uniqueness
+      const exists = state.jobRoles.some(r => r.code === cleanCode);
+      if (exists) {
+        triggerError('A role with this code already exists.');
+        return;
+      }
+
+      const newRole: JobRole = {
+        id: `role-${Date.now()}`,
+        name: roleName.trim(),
+        code: cleanCode,
+        description: roleDescription.trim(),
+        permissions: rolePermissions,
+        createdAt: new Date().toISOString(),
+      };
+      store.addJobRole(newRole);
+      triggerSuccess('New job role created successfully!');
+    }
+
+    setIsRoleModalOpen(false);
+    resetRoleForm();
+  };
+
+  const resetRoleForm = () => {
+    setEditingRole(null);
+    setRoleName('');
+    setRoleCode('');
+    setRoleDescription('');
+    setRolePermissions([]);
+  };
+
+  const handleEditRole = (role: JobRole) => {
+    if (['role-admin', 'role-kitchen', 'role-scanner'].includes(role.id) || ['ADMIN', 'KITCHEN', 'SCANNER'].includes(role.code)) {
+      triggerError('Core system roles cannot be edited.');
+      return;
+    }
+    setEditingRole(role);
+    setRoleName(role.name);
+    setRoleCode(role.code);
+    setRoleDescription(role.description);
+    setRolePermissions(role.permissions);
+    setIsRoleModalOpen(true);
+  };
+
+  const handleDeleteRole = (role: JobRole) => {
+    const res = store.deleteJobRole(role.id);
+    if (res.success) {
+      triggerSuccess('Job role deleted successfully.');
+    } else {
+      triggerError(res.error || 'Failed to delete role.');
+    }
+  };
+
+  const togglePermission = (permission: 'DASHBOARD' | 'KITCHEN' | 'SCANNER' | 'STAFF_MANAGEMENT') => {
+    if (rolePermissions.includes(permission)) {
+      setRolePermissions(rolePermissions.filter(p => p !== permission));
+    } else {
+      setRolePermissions([...rolePermissions, permission]);
+    }
+  };
+
+  const filteredStaff = state.users.filter(
+    u => u.name.toLowerCase().includes(staffSearch.toLowerCase()) || u.email.toLowerCase().includes(staffSearch.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Success/Error Alerts */}
+      {successMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-2">
+          <CheckCircle2 className="w-4.5 h-4.5" />
+          {successMsg}
+        </div>
+      )}
+      {errorMsg && (
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2">
+          <AlertTriangle className="w-4.5 h-4.5" />
+          {errorMsg}
+        </div>
+      )}
+
+      {/* Staff Dashboard Sub-Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setSubTab('STAFF')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+              subTab === 'STAFF'
+                ? 'bg-zinc-900 dark:bg-zinc-850 text-white border border-zinc-700'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            Staff Directory ({state.users.length})
+          </button>
+          <button
+            onClick={() => setSubTab('ROLES')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+              subTab === 'ROLES'
+                ? 'bg-zinc-900 dark:bg-zinc-850 text-white border border-zinc-700'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            Job Roles Registry ({state.jobRoles.length})
+          </button>
+        </div>
+
+        {subTab === 'STAFF' ? (
+          <button
+            onClick={() => {
+              resetStaffForm();
+              setIsStaffModalOpen(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/10"
+          >
+            <UserPlus className="w-4 h-4" /> Add Staff Member
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              resetRoleForm();
+              setIsRoleModalOpen(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/10"
+          >
+            <Plus className="w-4 h-4" /> Create Custom Job Role
+          </button>
+        )}
+      </div>
+
+      {/* SUBTAB 1: STAFF DIRECTORY */}
+      {subTab === 'STAFF' && (
+        <div className="space-y-4">
+          <div className="relative max-w-md">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search staff by name or email..."
+              value={staffSearch}
+              onChange={(e) => setStaffSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs bg-white dark:bg-zinc-900 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-zinc-800 dark:text-zinc-100"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredStaff.map((staff) => {
+              const roleObj = state.jobRoles.find(r => r.code === staff.role);
+              const showPass = showStaffPasswordMap[staff.id] || false;
+              const isCurrentUser = staff.id === state.currentUser?.id;
+
+              return (
+                <div
+                  key={staff.id}
+                  className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-300 relative overflow-hidden"
+                >
+                  {isCurrentUser && (
+                    <div className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl bg-amber-500 text-zinc-950 font-black text-[9px] uppercase tracking-wider">
+                      You
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20 font-black text-sm flex items-center justify-center">
+                        {staff.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white flex items-center gap-1.5">
+                          {staff.name}
+                        </h4>
+                        <p className="text-[11px] text-zinc-400">{staff.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-zinc-500 font-semibold">Assigned Role</span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black text-[10px] uppercase border border-amber-500/20">
+                          {roleObj?.name || staff.role}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-zinc-500 font-semibold">Passcode</span>
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono text-zinc-800 dark:text-zinc-200 font-bold bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 rounded">
+                            {showPass ? staff.passwordHash : '••••••'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowStaffPasswordMap({ ...showStaffPasswordMap, [staff.id]: !showPass })}
+                            className="text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-205 transition-colors cursor-pointer"
+                          >
+                            {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-zinc-505 font-semibold">Privileges</span>
+                        <div className="flex flex-wrap gap-1 justify-end max-w-[70%]">
+                          {roleObj?.permissions.map(p => (
+                            <span key={p} className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 text-[8px] font-black uppercase">
+                              {p.substring(0, 4)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                    <button
+                      onClick={() => handleEditStaff(staff)}
+                      className="flex-1 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Edit2 className="w-3 h-3" /> Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteStaff(staff.id)}
+                      disabled={staff.id === 'user-default-admin' || isCurrentUser}
+                      className={`flex-1 py-1.5 rounded-xl border font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-colors ${
+                        staff.id === 'user-default-admin' || isCurrentUser
+                          ? 'border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed bg-zinc-50 dark:bg-zinc-950/20'
+                          : 'border-rose-200 dark:border-rose-900/30 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                      }`}
+                    >
+                      <Trash2 className="w-3 h-3" /> Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 2: ROLES REGISTRY */}
+      {subTab === 'ROLES' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {state.jobRoles.map((role) => {
+            const isDefault = ['role-admin', 'role-kitchen', 'role-scanner'].includes(role.id);
+            const userCount = state.users.filter(u => u.role === role.code).length;
+
+            return (
+              <div
+                key={role.id}
+                className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-300 relative overflow-hidden"
+              >
+                {isDefault && (
+                  <div className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl bg-zinc-200 dark:bg-zinc-800 text-zinc-500 font-bold text-[9px] uppercase tracking-wider">
+                    Core System Role
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div>
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono text-[9px] font-black tracking-wide border border-zinc-200 dark:border-zinc-700">
+                      {role.code}
+                    </span>
+                    <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white mt-1.5">
+                      {role.name}
+                    </h4>
+                    <p className="text-[11px] text-zinc-500 mt-1 line-clamp-2">
+                      {role.description}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-zinc-550 font-semibold">Active Staff Assigned</span>
+                      <span className="font-extrabold text-zinc-900 dark:text-white">
+                        {userCount} {userCount === 1 ? 'member' : 'members'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 pt-1.5">
+                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">
+                        Assigned Permissions ({role.permissions.length})
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {role.permissions.map(p => (
+                          <span
+                            key={p}
+                            className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold border border-emerald-500/20"
+                          >
+                            {p.replace('_', ' ')}
+                          </span>
+                        ))}
+                        {role.permissions.length === 0 && (
+                          <span className="text-[10px] text-zinc-400 italic">No permissions set.</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                  <button
+                    onClick={() => handleEditRole(role)}
+                    disabled={isDefault}
+                    className={`flex-1 py-1.5 rounded-xl border font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-colors ${
+                      isDefault
+                        ? 'border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-600 bg-zinc-50 dark:bg-zinc-950/20 cursor-not-allowed'
+                        : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
+                    }`}
+                  >
+                    <Edit2 className="w-3 h-3" /> Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteRole(role)}
+                    disabled={isDefault || userCount > 0}
+                    className={`flex-1 py-1.5 rounded-xl border font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-colors ${
+                      isDefault || userCount > 0
+                        ? 'border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-600 bg-zinc-50 dark:bg-zinc-950/20 cursor-not-allowed'
+                        : 'border-rose-200 dark:border-rose-900/30 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                    }`}
+                    title={userCount > 0 ? "Reassign staff members first to delete this role" : ""}
+                  >
+                    <Trash2 className="w-3 h-3" /> Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* MODAL 1: ADD/EDIT STAFF */}
+      {isStaffModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-3xl shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200 text-xs">
+            <h3 className="text-base font-black text-zinc-900 dark:text-white">
+              {editingStaff ? 'Modify Staff Registry' : 'Register New Staff Member'}
+            </h3>
+
+            <form onSubmit={handleSaveStaff} className="space-y-4">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">
+                    Staff Full Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John Doe"
+                    value={staffName}
+                    onChange={(e) => setStaffName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="john@example.com"
+                    value={staffEmail}
+                    onChange={(e) => setStaffEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">
+                    Passcode / Password
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. pass123"
+                    value={staffPassword}
+                    onChange={(e) => setStaffPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-mono font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">
+                    Assigned Job Role
+                  </label>
+                  <select
+                    value={staffRole}
+                    onChange={(e) => setStaffRole(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-850 dark:text-zinc-100 font-bold"
+                  >
+                    {state.jobRoles.map((role) => (
+                      <option key={role.id} value={role.code}>
+                        {role.name} ({role.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsStaffModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer"
+                >
+                  {editingStaff ? 'Save Changes' : 'Register Staff'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: ADD/EDIT ROLE */}
+      {isRoleModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-3xl shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200 text-xs">
+            <h3 className="text-base font-black text-zinc-900 dark:text-white">
+              {editingRole ? 'Update Custom Role' : 'Create Custom Job Role'}
+            </h3>
+
+            <form onSubmit={handleSaveRole} className="space-y-4">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">
+                    Role Title
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Duty Manager"
+                    value={roleName}
+                    onChange={(e) => setRoleName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">
+                    Role Unique Code (Alphanumeric, Uppercase)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    disabled={!!editingRole}
+                    placeholder="e.g. MANAGER"
+                    value={roleCode}
+                    onChange={(e) => setRoleCode(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-mono font-black disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1">
+                    Brief Description
+                  </label>
+                  <textarea
+                    required
+                    rows={2}
+                    placeholder="Describe role responsibilities..."
+                    value={roleDescription}
+                    onChange={(e) => setRoleDescription(e.target.value)}
+                    className="w-full px-4 py-2 bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pl-1 block">
+                    Access Permissions Checklist
+                  </label>
+
+                  <div className="space-y-1.5 bg-zinc-50 dark:bg-zinc-955 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+                    {[
+                      { id: 'DASHBOARD', label: 'Admin Dashboard Panel Access', desc: 'Allows viewing reservation timelines, floor plans, settings, and occupancy.' },
+                      { id: 'KITCHEN', label: 'Kitchen KDS Display Access', desc: 'Allows viewing and updating cooking ticket timers.' },
+                      { id: 'SCANNER', label: 'Staff QR Scanner Access', desc: 'Allows door ticket checking and scanning check-ins.' },
+                      { id: 'STAFF_MANAGEMENT', label: 'Staff & Job Role Administration', desc: 'Full privileges to add/edit/remove staff and custom roles.' },
+                    ].map((perm) => {
+                      const isChecked = rolePermissions.includes(perm.id as any);
+                      return (
+                        <label
+                          key={perm.id}
+                          className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => togglePermission(perm.id as any)}
+                            className="mt-0.5 accent-amber-500 w-3.5 h-3.5"
+                          />
+                          <div>
+                            <span className="font-extrabold text-zinc-900 dark:text-white block">
+                              {perm.label}
+                            </span>
+                            <span className="text-[10px] text-zinc-500 block leading-tight">
+                              {perm.desc}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRoleModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer"
+                >
+                  {editingRole ? 'Save Changes' : 'Create Role'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

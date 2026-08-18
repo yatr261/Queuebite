@@ -54,17 +54,11 @@ export default function AdminPage() {
   const [regName, setRegName] = useState<string>('');
   const [regEmail, setRegEmail] = useState<string>('');
   const [regPassword, setRegPassword] = useState<string>('');
-  const [regRole, setRegRole] = useState<'ADMIN' | 'KITCHEN' | 'SCANNER'>('ADMIN');
+  const [regRole, setRegRole] = useState<string>('ADMIN');
   const [regSuccessMsg, setRegSuccessMsg] = useState<string | null>(null);
 
   // Sub-tab view state (defaulting based on role)
-  const [activePortalTab, setActivePortalTab] = useState<'DASHBOARD' | 'KITCHEN' | 'SCANNER'>(() => {
-    if (currentUser) {
-      if (currentUser.role === 'KITCHEN') return 'KITCHEN';
-      if (currentUser.role === 'SCANNER') return 'SCANNER';
-    }
-    return 'DASHBOARD';
-  });
+  const [activePortalTab, setActivePortalTab] = useState<'DASHBOARD' | 'KITCHEN' | 'SCANNER'>('DASHBOARD');
 
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
@@ -76,10 +70,35 @@ export default function AdminPage() {
   // Sync role to store on mount/auth change
   useEffect(() => {
     if (isAuthenticated && currentUser) {
-      store.setRole(currentUser.role);
+      const rObj = state.jobRoles?.find((r) => r.code === currentUser.role);
+      const perms = rObj?.permissions || [];
+      let viewRole: any = 'ADMIN';
+      if (perms.includes('DASHBOARD')) {
+        viewRole = 'ADMIN';
+      } else if (perms.includes('KITCHEN')) {
+        viewRole = 'KITCHEN';
+      } else if (perms.includes('SCANNER')) {
+        viewRole = 'SCANNER';
+      }
+      store.setRole(viewRole);
       store.setCurrentUser(currentUser);
     }
-  }, [isAuthenticated, currentUser]);
+  }, [isAuthenticated, currentUser, state.jobRoles]);
+
+  // Set default sub-tab when currentUser or jobRoles change
+  useEffect(() => {
+    if (currentUser && state.jobRoles) {
+      const rObj = state.jobRoles.find((r) => r.code === currentUser.role);
+      const perms = rObj?.permissions || [];
+      if (perms.includes('DASHBOARD')) {
+        setActivePortalTab('DASHBOARD');
+      } else if (perms.includes('KITCHEN')) {
+        setActivePortalTab('KITCHEN');
+      } else if (perms.includes('SCANNER')) {
+        setActivePortalTab('SCANNER');
+      }
+    }
+  }, [currentUser, state.jobRoles]);
 
   // If role is switched back to CUSTOMER, redirect to homepage /
   useEffect(() => {
@@ -90,10 +109,22 @@ export default function AdminPage() {
 
   // Normalize role to current authenticated user's role if they are in `/admin` (unless switching to customer)
   useEffect(() => {
-    if (isAuthenticated && currentUser && state.currentRole !== currentUser.role && state.currentRole !== 'CUSTOMER') {
-      store.setRole(currentUser.role);
+    if (isAuthenticated && currentUser && state.currentRole !== 'CUSTOMER') {
+      const rObj = state.jobRoles?.find((r) => r.code === currentUser.role);
+      const perms = rObj?.permissions || [];
+      let viewRole: any = 'ADMIN';
+      if (perms.includes('DASHBOARD')) {
+        viewRole = 'ADMIN';
+      } else if (perms.includes('KITCHEN')) {
+        viewRole = 'KITCHEN';
+      } else if (perms.includes('SCANNER')) {
+        viewRole = 'SCANNER';
+      }
+      if (state.currentRole !== viewRole) {
+        store.setRole(viewRole);
+      }
     }
-  }, [isAuthenticated, currentUser, state.currentRole]);
+  }, [isAuthenticated, currentUser, state.currentRole, state.jobRoles]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,16 +142,21 @@ export default function AdminPage() {
       setIsAuthenticated(true);
       setCurrentUser(foundUser);
       store.setCurrentUser(foundUser);
-      store.setRole(foundUser.role);
       
-      // Default view tab based on logged-in role
-      if (foundUser.role === 'KITCHEN') {
-        setActivePortalTab('KITCHEN');
-      } else if (foundUser.role === 'SCANNER') {
-        setActivePortalTab('SCANNER');
-      } else {
+      const rObj = state.jobRoles?.find((r) => r.code === foundUser.role);
+      const perms = rObj?.permissions || [];
+      let viewRole: any = 'ADMIN';
+      if (perms.includes('DASHBOARD')) {
+        viewRole = 'ADMIN';
         setActivePortalTab('DASHBOARD');
+      } else if (perms.includes('KITCHEN')) {
+        viewRole = 'KITCHEN';
+        setActivePortalTab('KITCHEN');
+      } else if (perms.includes('SCANNER')) {
+        viewRole = 'SCANNER';
+        setActivePortalTab('SCANNER');
       }
+      store.setRole(viewRole);
     } else {
       setErrorMsg('Invalid credentials. Check email/passcode.');
     }
@@ -341,12 +377,14 @@ export default function AdminPage() {
                     </label>
                     <select
                       value={regRole}
-                      onChange={(e) => setRegRole(e.target.value as typeof regRole)}
-                      className="w-full px-4 py-3 text-xs bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-zinc-700 dark:text-zinc-200"
+                      onChange={(e) => setRegRole(e.target.value)}
+                      className="w-full px-4 py-3 text-xs bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold transition-all text-zinc-700 dark:text-zinc-200"
                     >
-                      <option value="ADMIN">System Admin (Full Access)</option>
-                      <option value="KITCHEN">Kitchen Staff (KDS Only)</option>
-                      <option value="SCANNER">Scanner Staff (QR Scanner Only)</option>
+                      {state.jobRoles.map((role) => (
+                        <option key={role.id} value={role.code}>
+                          {role.name} ({role.permissions.map(p => p.charAt(0) + p.slice(1).toLowerCase().replace('_', ' ')).join(', ')})
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -367,8 +405,15 @@ export default function AdminPage() {
     );
   }
 
-  // authenticated portal role-based views
-  const isAdmin = currentUser?.role === 'ADMIN';
+  // Resolve dynamic role permissions
+  const currentUserRoleObj = state.jobRoles?.find((r) => r.code === currentUser?.role);
+  const permissions = currentUserRoleObj?.permissions || [];
+  
+  const hasDashboard = permissions.includes('DASHBOARD');
+  const hasKitchen = permissions.includes('KITCHEN');
+  const hasScanner = permissions.includes('SCANNER');
+  
+  const hasMultipleTabs = [hasDashboard, hasKitchen, hasScanner].filter(Boolean).length > 1;
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors">
@@ -389,7 +434,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-zinc-900 dark:text-white">{currentUser?.name}</span>
                 <span className="px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-black text-zinc-500 uppercase tracking-wider border border-zinc-200 dark:border-zinc-700">
-                  {currentUser?.role}
+                  {currentUserRoleObj?.name || currentUser?.role}
                 </span>
               </div>
               <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
@@ -414,15 +459,15 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Render Tab Switcher ONLY for Admin Role */}
-        {isAdmin && (
+        {/* Render Tab Switcher ONLY if user has multiple layout privileges */}
+        {hasMultipleTabs && (
           <div className="flex justify-center">
             <div className="inline-flex p-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-inner gap-1">
               {[
-                { id: 'DASHBOARD', label: 'Admin Dashboard', icon: LayoutDashboard },
-                { id: 'KITCHEN', label: 'Kitchen KDS', icon: ChefHat },
-                { id: 'SCANNER', label: 'Staff QR Scanner', icon: QrCode },
-              ].map((tab) => {
+                { id: 'DASHBOARD', label: 'Admin Dashboard', icon: LayoutDashboard, show: hasDashboard },
+                { id: 'KITCHEN', label: 'Kitchen KDS', icon: ChefHat, show: hasKitchen },
+                { id: 'SCANNER', label: 'Staff QR Scanner', icon: QrCode, show: hasScanner },
+              ].filter(t => t.show).map((tab) => {
                 const Icon = tab.icon;
                 const isSelected = activePortalTab === tab.id;
                 return (
@@ -445,9 +490,9 @@ export default function AdminPage() {
         )}
 
         {/* Tab Views based on Role access */}
-        {activePortalTab === 'DASHBOARD' && isAdmin && <AdminDashboard />}
-        {activePortalTab === 'KITCHEN' && <KitchenKDS />}
-        {activePortalTab === 'SCANNER' && <StaffQRScanner />}
+        {activePortalTab === 'DASHBOARD' && hasDashboard && <AdminDashboard />}
+        {activePortalTab === 'KITCHEN' && hasKitchen && <KitchenKDS />}
+        {activePortalTab === 'SCANNER' && hasScanner && <StaffQRScanner />}
       </main>
 
       {/* Global Modals */}

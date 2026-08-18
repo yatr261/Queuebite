@@ -13,6 +13,7 @@ import {
   TableSection,
   Table,
   PortalUser,
+  JobRole,
 } from './types';
 import {
   INITIAL_RESTAURANTS,
@@ -56,6 +57,7 @@ export interface AppState {
   activeWaitlistModal: boolean;
   users: PortalUser[];
   currentUser: PortalUser | null;
+  jobRoles: JobRole[];
 }
 
 const DEFAULT_STATE: AppState = {
@@ -92,8 +94,48 @@ const DEFAULT_STATE: AppState = {
       passwordHash: 'admin123',
       role: 'ADMIN',
     },
+    {
+      id: 'user-chef',
+      name: 'Chef Anand',
+      email: 'chef@queuebite.com',
+      passwordHash: 'chef123',
+      role: 'KITCHEN',
+    },
+    {
+      id: 'user-scanner',
+      name: 'Rohan Scanner',
+      email: 'scanner@queuebite.com',
+      passwordHash: 'scanner123',
+      role: 'SCANNER',
+    },
   ],
   currentUser: null,
+  jobRoles: [
+    {
+      id: 'role-admin',
+      name: 'System Admin',
+      code: 'ADMIN',
+      description: 'Full administrative access to settings, staff registry, analytics, KDS, and QR scanner.',
+      permissions: ['DASHBOARD', 'KITCHEN', 'SCANNER', 'STAFF_MANAGEMENT'],
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'role-kitchen',
+      name: 'Kitchen Staff',
+      code: 'KITCHEN',
+      description: 'Access to Kitchen Display System (KDS) and cooking order tracking.',
+      permissions: ['KITCHEN'],
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'role-scanner',
+      name: 'Scanner Staff',
+      code: 'SCANNER',
+      description: 'Access to entrance door QR pass scanning and check-ins.',
+      permissions: ['SCANNER'],
+      createdAt: new Date().toISOString(),
+    },
+  ],
 };
 
 type Listener = () => void;
@@ -124,6 +166,7 @@ class StateStore {
           waitlist: parsed.waitlist || INITIAL_WAITLIST,
           notifications: parsed.notifications || INITIAL_NOTIFICATIONS,
           users: parsed.users || DEFAULT_STATE.users,
+          jobRoles: parsed.jobRoles || DEFAULT_STATE.jobRoles,
         };
       }
     } catch {
@@ -146,6 +189,7 @@ class StateStore {
           chatMessages: this.state.chatMessages,
           currentRole: this.state.currentRole,
           users: this.state.users,
+          jobRoles: this.state.jobRoles,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
       } catch {
@@ -179,6 +223,8 @@ class StateStore {
       kitchenTickets: JSON.parse(JSON.stringify(INITIAL_KITCHEN_TICKETS)),
       waitlist: JSON.parse(JSON.stringify(INITIAL_WAITLIST)),
       notifications: JSON.parse(JSON.stringify(INITIAL_NOTIFICATIONS)),
+      users: JSON.parse(JSON.stringify(DEFAULT_STATE.users)),
+      jobRoles: JSON.parse(JSON.stringify(DEFAULT_STATE.jobRoles)),
     };
     this.notify();
   }
@@ -200,6 +246,96 @@ class StateStore {
   public setCurrentUser(user: PortalUser | null) {
     this.state = { ...this.state, currentUser: user };
     this.notify();
+  }
+
+  // --- Dynamic Staff & Roles Actions ---
+  public addStaff(user: PortalUser) {
+    this.state = {
+      ...this.state,
+      users: [...this.state.users, user],
+    };
+    this.notify();
+  }
+
+  public updateStaff(userId: string, updates: Partial<PortalUser>) {
+    this.state = {
+      ...this.state,
+      users: this.state.users.map((u) => (u.id === userId ? { ...u, ...updates } : u)),
+    };
+    // Sync current user state if they updated themselves
+    if (this.state.currentUser?.id === userId) {
+      this.state.currentUser = { ...this.state.currentUser, ...updates };
+    }
+    this.notify();
+  }
+
+  public deleteStaff(userId: string) {
+    this.state = {
+      ...this.state,
+      users: this.state.users.filter((u) => u.id !== userId),
+    };
+    if (this.state.currentUser?.id === userId) {
+      this.state.currentUser = null;
+      this.state.currentRole = 'CUSTOMER';
+    }
+    this.notify();
+  }
+
+  public addJobRole(role: JobRole) {
+    this.state = {
+      ...this.state,
+      jobRoles: [...this.state.jobRoles, role],
+    };
+    this.notify();
+  }
+
+  public updateJobRole(roleId: string, updates: Partial<JobRole>) {
+    const oldRole = this.state.jobRoles.find((r) => r.id === roleId);
+    if (!oldRole) return;
+
+    const newRoles = this.state.jobRoles.map((r) => (r.id === roleId ? { ...r, ...updates } : r));
+
+    // If role code is changing, we must update all staff members using the old role code
+    let newUsers = this.state.users;
+    if (updates.code && updates.code !== oldRole.code) {
+      newUsers = this.state.users.map((u) => (u.role === oldRole.code ? { ...u, role: updates.code! } : u));
+    }
+
+    this.state = {
+      ...this.state,
+      jobRoles: newRoles,
+      users: newUsers,
+    };
+    
+    // Also sync currentUser if needed
+    if (this.state.currentUser && this.state.currentUser.role === oldRole.code && updates.code) {
+      this.state.currentUser = { ...this.state.currentUser, role: updates.code };
+    }
+
+    this.notify();
+  }
+
+  public deleteJobRole(roleId: string): { success: boolean; error?: string } {
+    const roleToDelete = this.state.jobRoles.find((r) => r.id === roleId);
+    if (!roleToDelete) return { success: false, error: 'Role not found' };
+
+    // Prevent deleting default roles
+    if (['role-admin', 'role-kitchen', 'role-scanner'].includes(roleId) || ['ADMIN', 'KITCHEN', 'SCANNER'].includes(roleToDelete.code)) {
+      return { success: false, error: 'Core system roles cannot be deleted.' };
+    }
+
+    // Check if role is in use
+    const inUse = this.state.users.some((u) => u.role === roleToDelete.code);
+    if (inUse) {
+      return { success: false, error: `This role is currently assigned to one or more staff members. Please reassign them before deleting.` };
+    }
+
+    this.state = {
+      ...this.state,
+      jobRoles: this.state.jobRoles.filter((r) => r.id !== roleId),
+    };
+    this.notify();
+    return { success: true };
   }
 
   public setSelectedRestaurant(restaurantId: string) {

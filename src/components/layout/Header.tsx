@@ -222,7 +222,11 @@ export default function Header({
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-sm transition-all ${currentRoleInfo.color}`}
               >
                 <RoleIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{currentRoleInfo.label}</span>
+                <span className="hidden sm:inline">
+                  {state.currentUser && state.currentRole !== 'CUSTOMER'
+                    ? `${state.jobRoles?.find(r => r.code === state.currentUser?.role)?.name || state.currentUser.role}`
+                    : currentRoleInfo.label}
+                </span>
                 <ChevronDown className="w-3 h-3 opacity-60" />
               </button>
 

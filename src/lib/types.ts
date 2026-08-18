@@ -211,10 +211,19 @@ export interface ChatMessage {
 
 export type AppViewRole = 'CUSTOMER' | 'ADMIN' | 'KITCHEN' | 'SCANNER';
 
+export interface JobRole {
+  id: string;
+  name: string;
+  code: string; // e.g. "ADMIN", "KITCHEN", "SCANNER", "MANAGER", "WAITER"
+  description: string;
+  permissions: ('DASHBOARD' | 'KITCHEN' | 'SCANNER' | 'STAFF_MANAGEMENT')[];
+  createdAt: string;
+}
+
 export interface PortalUser {
   id: string;
   name: string;
   email: string;
   passwordHash: string;
-  role: 'ADMIN' | 'KITCHEN' | 'SCANNER';
+  role: string; // References JobRole.code
 }
