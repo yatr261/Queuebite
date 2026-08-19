@@ -380,6 +380,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
         minOrder: 600,
       },
     ],
+    acceptedPaymentMethods: ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'],
   },
   {
     id: 'rest-2',
@@ -417,6 +418,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
         discountPercent: 15,
       },
     ],
+    acceptedPaymentMethods: ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'],
   },
   {
     id: 'rest-3',
@@ -453,6 +455,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
         discountPercent: 10,
       },
     ],
+    acceptedPaymentMethods: ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'],
   },
 ];
 

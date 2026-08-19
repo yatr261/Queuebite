@@ -169,6 +169,7 @@ export interface Restaurant {
     discountFlat?: number;
     minOrder?: number;
   }[];
+  acceptedPaymentMethods?: ('UPI' | 'CARD' | 'NETBANKING' | 'CASH_AT_DESK')[];
 }
 
 export interface NotificationItem {

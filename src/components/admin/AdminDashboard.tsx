@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { store, AppState } from '@/lib/store';
-import { Reservation, Table, QueueToken, PortalUser, JobRole } from '@/lib/types';
+import { Reservation, Table, QueueToken, PortalUser, JobRole, MenuItem, DietaryType, Restaurant } from '@/lib/types';
 import { formatDate, formatTime12h, formatCurrency, getTodayDateString } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -29,11 +29,15 @@ import {
   UserPlus,
   Eye,
   EyeOff,
+  Leaf,
+  Camera,
+  Tag,
+  X,
 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [state, setState] = React.useState<AppState>(store.getState());
-  const [adminTab, setAdminTab] = useState<'OVERVIEW' | 'RESERVATIONS' | 'FLOOR_PLAN' | 'TIMELINE' | 'QUEUE' | 'SETTINGS' | 'STAFF'>('OVERVIEW');
+  const [adminTab, setAdminTab] = useState<'OVERVIEW' | 'RESERVATIONS' | 'FLOOR_PLAN' | 'TIMELINE' | 'QUEUE' | 'MENU' | 'SETTINGS' | 'STAFF'>('OVERVIEW');
   const [resFilter, setResFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -116,6 +120,7 @@ export default function AdminDashboard() {
           { id: 'FLOOR_PLAN', label: 'Visual Floor Plan', icon: Grid, show: true },
           { id: 'TIMELINE', label: 'Table Timeline Matrix', icon: Clock, show: true },
           { id: 'QUEUE', label: `Live Queue (${activeWalkinQueueCount})`, icon: Ticket, show: true },
+          { id: 'MENU', label: 'Menu & Offers', icon: ChefHat, show: true },
           { id: 'SETTINGS', label: 'Restaurant Settings', icon: Settings, show: true },
           { id: 'STAFF', label: 'Staff & Roles', icon: Users, show: canManageStaff },
         ].filter(t => t.show).map((tab) => {
@@ -654,8 +659,60 @@ export default function AdminDashboard() {
                 {restaurant.cleaningBufferMinutes} Minutes
               </span>
             </div>
+
+            {/* Accepted Payment Methods Configuration */}
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/60 space-y-3">
+              <div>
+                <p className="font-bold text-zinc-900 dark:text-white">Dine-in Accepted Payment Methods</p>
+                <p className="text-zinc-500">Toggle checkout payment methods visible to customers during reservation & queue booking</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                {[
+                  { id: 'UPI', label: 'UPI (GPay/PhonePe)', icon: '⚡' },
+                  { id: 'CARD', label: 'Credit/Debit Card', icon: '💳' },
+                  { id: 'NETBANKING', label: 'Net Banking', icon: '🏦' },
+                  { id: 'CASH_AT_DESK', label: 'Pay at Desk', icon: '💵' },
+                ].map((pm) => {
+                  const accepted = restaurant.acceptedPaymentMethods || ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'];
+                  const isChecked = accepted.includes(pm.id as any);
+                  return (
+                    <label
+                      key={pm.id}
+                      className="flex items-center gap-2 p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-700 text-[11px] font-bold text-zinc-800 dark:text-zinc-200"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          let newAccepted = [...accepted];
+                          if (isChecked) {
+                            if (newAccepted.length > 1) {
+                              newAccepted = newAccepted.filter((id) => id !== pm.id);
+                            }
+                          } else {
+                            newAccepted.push(pm.id as any);
+                          }
+                          store.updateRestaurantSettings(restaurant.id, {
+                            acceptedPaymentMethods: newAccepted,
+                          });
+                        }}
+                        className="accent-amber-500 w-3.5 h-3.5"
+                      />
+                      <span className="flex items-center gap-1">
+                        <span>{pm.icon}</span>
+                        {pm.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
+      )}
+      {/* TAB 5.5: MENU & OFFERS MODIFIER */}
+      {adminTab === 'MENU' && (
+        <MenuOffersView state={state} />
       )}
       {/* TAB 7: STAFF & ROLES MANAGEMENT */}
       {adminTab === 'STAFF' && canManageStaff && (
@@ -1321,6 +1378,743 @@ function StaffManagementView({ state }: { state: AppState }) {
                   className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer"
                 >
                   {editingRole ? 'Save Changes' : 'Create Role'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Visual presets of premium food images from Unsplash for quick admin selecting
+const PRESET_FOOD_IMAGES = [
+  { name: 'Paneer Tikka / Starter', url: 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Crispy Corn / Fries', url: 'https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Tandoori Chicken Wings', url: 'https://images.unsplash.com/photo-1527477321055-43615852573d?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Classic Masala Dosa', url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Artisanal Pizza', url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Classic Sliders / Burger', url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Chana Masala Curries', url: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Cold Coffee / Beverage', url: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Chocolate Fudge Brownie', url: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=500&auto=format&fit=crop&q=80' },
+  { name: 'Family Combo Platter', url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500&auto=format&fit=crop&q=80' },
+];
+
+function MenuOffersView({ state }: { state: AppState }) {
+  const categories = ['All', 'Starters', 'Main Course', 'Dosa', 'Pizza', 'Burgers', 'Beverages', 'Desserts', 'Combos'];
+  const [subTab, setSubTab] = useState<'MENU' | 'OFFERS'>('MENU');
+  const [menuSearch, setMenuSearch] = useState('');
+  
+  // Menu Item Modal form states
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [itemName, setItemName] = useState('');
+  const [itemCategory, setItemCategory] = useState<MenuItem['category']>('Starters');
+  const [itemPrice, setItemPrice] = useState(150);
+  const [itemDescription, setItemDescription] = useState('');
+  const [itemImage, setItemImage] = useState('');
+  const [itemDietary, setItemDietary] = useState<DietaryType>('VEG');
+  const [itemSpiceLevel, setItemSpiceLevel] = useState<'Mild' | 'Medium' | 'Spicy'>('Medium');
+  const [itemPrepTime, setItemPrepTime] = useState(15);
+  const [itemCalories, setItemCalories] = useState(300);
+  const [itemIsPopular, setItemIsPopular] = useState(false);
+
+  // Offers Modal form states
+  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<Restaurant['offers'][0] | null>(null);
+  const [offerCode, setOfferCode] = useState('');
+  const [offerTitle, setOfferTitle] = useState('');
+  const [offerDescription, setOfferDescription] = useState('');
+  const [offerDiscountType, setOfferDiscountType] = useState<'PERCENT' | 'FLAT'>('PERCENT');
+  const [offerDiscountValue, setOfferDiscountValue] = useState(10);
+  const [offerMinOrder, setOfferMinOrder] = useState(0);
+
+  // Alerts
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const restaurant =
+    state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
+
+  const triggerSuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 4000);
+  };
+
+  const triggerError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(null), 4000);
+  };
+
+  const resetMenuForm = () => {
+    setEditingItem(null);
+    setItemName('');
+    setItemCategory('Starters');
+    setItemPrice(150);
+    setItemDescription('');
+    setItemImage('');
+    setItemDietary('VEG');
+    setItemSpiceLevel('Medium');
+    setItemPrepTime(15);
+    setItemCalories(300);
+    setItemIsPopular(false);
+  };
+
+  const handleEditItem = (item: MenuItem) => {
+    setEditingItem(item);
+    setItemName(item.name);
+    setItemCategory(item.category);
+    setItemPrice(item.price);
+    setItemDescription(item.description);
+    setItemImage(item.image);
+    setItemDietary(item.dietary);
+    setItemSpiceLevel(item.spiceLevel || 'Medium');
+    setItemPrepTime(item.prepTimeMinutes);
+    setItemCalories(item.calories || 300);
+    setItemIsPopular(!!item.isPopular);
+    setIsMenuModalOpen(true);
+  };
+
+  const handleDeleteItem = (itemId: string) => {
+    if (confirm('Are you sure you want to remove this dish from the menu?')) {
+      store.deleteMenuItem(restaurant.id, itemId);
+      triggerSuccess('Dish removed from menu.');
+    }
+  };
+
+  const handleSaveItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!itemName.trim() || !itemDescription.trim() || !itemImage.trim()) {
+      triggerError('Please fill out all fields.');
+      return;
+    }
+
+    const payload = {
+      name: itemName.trim(),
+      category: itemCategory,
+      price: Number(itemPrice),
+      description: itemDescription.trim(),
+      image: itemImage.trim(),
+      dietary: itemDietary,
+      spiceLevel: itemSpiceLevel,
+      prepTimeMinutes: Number(itemPrepTime),
+      calories: Number(itemCalories),
+      isPopular: itemIsPopular,
+    };
+
+    if (editingItem) {
+      store.updateMenuItem(restaurant.id, editingItem.id, payload);
+      triggerSuccess('Dish updated successfully!');
+    } else {
+      const newItem: MenuItem = {
+        id: `menu-${Date.now()}`,
+        ...payload,
+      };
+      store.addMenuItem(restaurant.id, newItem);
+      triggerSuccess('New dish added to menu!');
+    }
+
+    setIsMenuModalOpen(false);
+    resetMenuForm();
+  };
+
+  const resetOfferForm = () => {
+    setEditingOffer(null);
+    setOfferCode('');
+    setOfferTitle('');
+    setOfferDescription('');
+    setOfferDiscountType('PERCENT');
+    setOfferDiscountValue(10);
+    setOfferMinOrder(0);
+  };
+
+  const handleEditOffer = (offer: Restaurant['offers'][0]) => {
+    setEditingOffer(offer);
+    setOfferCode(offer.code);
+    setOfferTitle(offer.title);
+    setOfferDescription(offer.description);
+    if (offer.discountPercent !== undefined) {
+      setOfferDiscountType('PERCENT');
+      setOfferDiscountValue(offer.discountPercent);
+    } else {
+      setOfferDiscountType('FLAT');
+      setOfferDiscountValue(offer.discountFlat || 0);
+    }
+    setOfferMinOrder(offer.minOrder || 0);
+    setIsOfferModalOpen(true);
+  };
+
+  const handleDeleteOffer = (code: string) => {
+    if (confirm(`Are you sure you want to delete the offer scheme "${code}"?`)) {
+      store.deleteOffer(restaurant.id, code);
+      triggerSuccess('Offer scheme deleted.');
+    }
+  };
+
+  const handleSaveOffer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!offerCode.trim() || !offerTitle.trim() || !offerDescription.trim()) {
+      triggerError('Please fill out all fields.');
+      return;
+    }
+    const cleanCode = offerCode.trim().toUpperCase().replace(/\s+/g, '');
+
+    const exists = restaurant.offers?.some(o => o.code === cleanCode);
+    if (exists && !editingOffer) {
+      triggerError('An offer scheme with this code already exists.');
+      return;
+    }
+
+    const payload = {
+      code: cleanCode,
+      title: offerTitle.trim(),
+      description: offerDescription.trim(),
+      discountPercent: offerDiscountType === 'PERCENT' ? Number(offerDiscountValue) : undefined,
+      discountFlat: offerDiscountType === 'FLAT' ? Number(offerDiscountValue) : undefined,
+      minOrder: offerMinOrder > 0 ? Number(offerMinOrder) : undefined,
+    };
+
+    if (editingOffer) {
+      // Delete old code, add updated (in case code was edited)
+      store.deleteOffer(restaurant.id, editingOffer.code);
+    }
+    store.addOffer(restaurant.id, payload);
+    triggerSuccess(editingOffer ? 'Offer updated successfully!' : 'New offer scheme created!');
+
+    setIsOfferModalOpen(false);
+    resetOfferForm();
+  };
+
+  const filteredMenu = restaurant.menu.filter(
+    (item) =>
+      item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+      item.category.toLowerCase().includes(menuSearch.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6 text-xs text-zinc-800 dark:text-zinc-200">
+      {/* Success/Error Alerts */}
+      {successMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          {successMsg}
+        </div>
+      )}
+      {errorMsg && (
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" />
+          {errorMsg}
+        </div>
+      )}
+
+      {/* Internal Sub-Navigation */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-100 dark:bg-zinc-850/40 border border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setSubTab('MENU')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              subTab === 'MENU'
+                ? 'bg-zinc-900 dark:bg-zinc-850 text-white border border-zinc-700 dark:border-zinc-650'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            Menu Directory ({restaurant.menu.length} Items)
+          </button>
+          <button
+            onClick={() => setSubTab('OFFERS')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              subTab === 'OFFERS'
+                ? 'bg-zinc-900 dark:bg-zinc-850 text-white border border-zinc-700 dark:border-zinc-650'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            Offers & Schemes ({restaurant.offers?.length || 0})
+          </button>
+        </div>
+
+        {subTab === 'MENU' ? (
+          <button
+            onClick={() => {
+              resetMenuForm();
+              setIsMenuModalOpen(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/10 cursor-pointer animate-in fade-in"
+          >
+            <Plus className="w-4 h-4" /> Add Dish
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              resetOfferForm();
+              setIsOfferModalOpen(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/10 cursor-pointer animate-in fade-in"
+          >
+            <Plus className="w-4 h-4" /> Create Offer Scheme
+          </button>
+        )}
+      </div>
+
+      {/* SUBTAB 1: MENU DIRECTORY */}
+      {subTab === 'MENU' && (
+        <div className="space-y-4">
+          <div className="relative max-w-md">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search dish by name or category..."
+              value={menuSearch}
+              onChange={(e) => setMenuSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all text-zinc-800 dark:text-zinc-100"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredMenu.map((item) => (
+              <div
+                key={item.id}
+                className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-300 relative overflow-hidden"
+              >
+                {item.isPopular && (
+                  <div className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-955 font-black text-[9px] uppercase tracking-wider flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Popular
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="w-16 h-16 rounded-2xl object-cover shrink-0 bg-zinc-100 border border-zinc-200 dark:border-zinc-800"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider ${
+                            item.dietary === 'NON_VEG'
+                              ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                              : item.dietary === 'VEGAN'
+                              ? 'bg-green-500/10 text-green-600 border border-green-550/20'
+                              : 'bg-emerald-500/10 text-emerald-600 border border-emerald-555/20'
+                          }`}
+                        >
+                          {item.dietary === 'NON_VEG' ? 'Non-Veg' : item.dietary === 'VEGAN' ? 'Vegan' : 'Veg'}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-bold bg-zinc-100 dark:bg-zinc-850 px-1.5 py-0.2 rounded">
+                          {item.category}
+                        </span>
+                      </div>
+                      <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white truncate mt-1">
+                        {item.name}
+                      </h4>
+                      <p className="text-xs font-black text-amber-600 mt-0.5">{formatCurrency(item.price)}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-zinc-500 text-[11px] leading-relaxed line-clamp-2">
+                    {item.description}
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-zinc-100 dark:border-zinc-800 text-center text-zinc-650 dark:text-zinc-400">
+                    <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
+                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Prep Time</span>
+                      <span className="font-black text-zinc-700 dark:text-zinc-300">{item.prepTimeMinutes} mins</span>
+                    </div>
+                    <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
+                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Spice</span>
+                      <span className="font-black text-zinc-700 dark:text-zinc-300">{item.spiceLevel || 'Medium'}</span>
+                    </div>
+                    <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
+                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Calories</span>
+                      <span className="font-black text-zinc-700 dark:text-zinc-300">{item.calories || 300} kcal</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                  <button
+                    onClick={() => handleEditItem(item)}
+                    className="flex-1 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-850 text-zinc-700 dark:text-zinc-300 font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Edit2 className="w-3 h-3" /> Edit Dish
+                  </button>
+                  <button
+                    onClick={() => handleDeleteItem(item.id)}
+                    className="flex-1 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/30 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" /> Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 2: OFFERS & SCHEMES */}
+      {subTab === 'OFFERS' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {restaurant.offers?.map((offer) => (
+            <div
+              key={offer.code}
+              className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-300 relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-black text-[9px] uppercase tracking-wider">
+                {offer.discountPercent !== undefined ? `${offer.discountPercent}% OFF` : `₹${offer.discountFlat} OFF`}
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 border border-amber-500/20 font-mono text-[9px] font-black tracking-wide">
+                    {offer.code}
+                  </span>
+                  <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white mt-2">
+                    {offer.title}
+                  </h4>
+                  <p className="text-[11px] text-zinc-550 mt-1 leading-relaxed">
+                    {offer.description}
+                  </p>
+                </div>
+
+                <div className="pt-2.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] flex justify-between">
+                  <span className="text-zinc-500 font-semibold">Min. Order Limit</span>
+                  <span className="font-bold text-zinc-900 dark:text-white">
+                    {offer.minOrder ? formatCurrency(offer.minOrder) : 'No Limit'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  onClick={() => handleEditOffer(offer)}
+                  className="flex-1 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-850 text-zinc-700 dark:text-zinc-300 font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="w-3 h-3" /> Modify
+                </button>
+                <button
+                  onClick={() => handleDeleteOffer(offer.code)}
+                  className="flex-1 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/30 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {(!restaurant.offers || restaurant.offers.length === 0) && (
+            <div className="col-span-full text-center py-12 bg-zinc-50 dark:bg-zinc-850 rounded-3xl border border-zinc-200 dark:border-zinc-800">
+              <p className="text-zinc-500 font-bold">No active promotional discount schemes. Create one!</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* DISH FORM MODAL */}
+      {isMenuModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-xl max-h-[90vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-3xl shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200 flex flex-col overflow-hidden text-zinc-800 dark:text-zinc-200">
+            <div className="flex justify-between items-center pb-1 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+              <h3 className="text-base font-black text-zinc-900 dark:text-white">
+                {editingItem ? 'Update Dish Details' : 'Add New Dish to Menu'}
+              </h3>
+              <button
+                onClick={() => setIsMenuModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-850 text-zinc-400 cursor-pointer"
+              >
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveItem} className="space-y-4 overflow-y-auto flex-1 pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-[11px]">
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Dish Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Butter Paneer Masala"
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Menu Category</label>
+                  <select
+                    value={itemCategory}
+                    onChange={(e) => setItemCategory(e.target.value as any)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  >
+                    {categories.filter(c => c !== 'All').map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Price (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    min={10}
+                    value={itemPrice}
+                    onChange={(e) => setItemPrice(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Prep Time (minutes)</label>
+                  <input
+                    type="number"
+                    required
+                    min={2}
+                    value={itemPrepTime}
+                    onChange={(e) => setItemPrepTime(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Calories (kcal)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={itemCalories}
+                    onChange={(e) => setItemCalories(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Spice Heat Level</label>
+                  <select
+                    value={itemSpiceLevel}
+                    onChange={(e) => setItemSpiceLevel(e.target.value as any)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  >
+                    <option value="Mild">Mild</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Spicy">Spicy</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1 block">Dietary Preference</label>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    {[
+                      { id: 'VEG', label: 'Vegetarian', icon: '🟢' },
+                      { id: 'NON_VEG', label: 'Non-Vegetarian', icon: '🔴' },
+                      { id: 'VEGAN', label: 'Vegan', icon: '🌱' },
+                    ].map((opt) => {
+                      const isSel = itemDietary === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setItemDietary(opt.id as any)}
+                          className={`p-2.5 rounded-xl border text-center transition-all font-bold cursor-pointer ${
+                            isSel
+                              ? 'border-amber-500 ring-2 ring-amber-500 bg-amber-500/10 text-amber-600 font-black'
+                              : 'border-zinc-200 dark:border-zinc-800 text-zinc-650 dark:text-zinc-400 hover:border-zinc-300'
+                          }`}
+                        >
+                          <span className="mr-1">{opt.icon}</span>
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Dish Image / Photo URL</label>
+                    <span className="text-[10px] text-zinc-400">Choose from presets below or paste custom URL</span>
+                  </div>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://example.com/food.jpg"
+                    value={itemImage}
+                    onChange={(e) => setItemImage(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-mono text-[10px]"
+                  />
+                  
+                  {/* Preset Visual Photo Select Gallery */}
+                  <div className="space-y-1 pt-1.5">
+                    <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">Quick Select Preset Food Photos:</span>
+                    <div className="flex gap-2 overflow-x-auto pb-1 bg-zinc-50 dark:bg-zinc-850 p-2 rounded-2xl border border-zinc-200 dark:border-zinc-800 scrollbar-thin">
+                      {PRESET_FOOD_IMAGES.map((img, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => setItemImage(img.url)}
+                          className={`shrink-0 border-2 rounded-xl overflow-hidden hover:opacity-100 transition-all flex flex-col items-center p-1 bg-white dark:bg-zinc-900 cursor-pointer ${
+                            itemImage === img.url ? 'border-amber-500 opacity-100 shadow' : 'border-transparent opacity-60'
+                          }`}
+                        >
+                          <img src={img.url} alt={img.name} className="w-10 h-10 object-cover rounded-lg" />
+                          <span className="text-[8px] font-bold text-zinc-500 dark:text-zinc-400 max-w-16 truncate mt-0.5">{img.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Dish Description</label>
+                  <textarea
+                    required
+                    rows={2}
+                    placeholder="Describe main ingredients, taste profile, allergens..."
+                    value={itemDescription}
+                    onChange={(e) => setItemDescription(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-805 dark:text-zinc-100 font-medium"
+                  />
+                </div>
+
+                <div className="md:col-span-2 py-1">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-zinc-700 dark:text-zinc-350">
+                    <input
+                      type="checkbox"
+                      checked={itemIsPopular}
+                      onChange={(e) => setItemIsPopular(e.target.checked)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>Highlight as &quot;Chef&apos;s Special / Popular&quot; on customer menu</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-3 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsMenuModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-850 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer"
+                >
+                  {editingItem ? 'Save Updates' : 'Add to Menu'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* OFFERS / SCHEMES MODAL */}
+      {isOfferModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-3xl shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200 text-xs text-zinc-800 dark:text-zinc-200">
+            <div className="flex justify-between items-center pb-1 border-b border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-base font-black text-zinc-900 dark:text-white">
+                {editingOffer ? 'Update Coupon/Scheme' : 'Create New Promotional Offer'}
+              </h3>
+              <button
+                onClick={() => setIsOfferModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-850 text-zinc-400 cursor-pointer"
+              >
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOffer} className="space-y-4">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Promo Coupon Code</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. FEAST20"
+                    value={offerCode}
+                    onChange={(e) => setOfferCode(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-mono font-black uppercase"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Offer Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 20% OFF on Tandoori Pre-Orders"
+                    value={offerTitle}
+                    onChange={(e) => setOfferTitle(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Discount Type</label>
+                    <select
+                      value={offerDiscountType}
+                      onChange={(e) => setOfferDiscountType(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                    >
+                      <option value="PERCENT">Percentage Off (%)</option>
+                      <option value="FLAT">Flat Amount Off (₹)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Discount Value</label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      value={offerDiscountValue}
+                      onChange={(e) => setOfferDiscountValue(Number(e.target.value))}
+                      className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Minimum Bill Order Amount (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={offerMinOrder}
+                    onChange={(e) => setOfferMinOrder(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Offer Description</label>
+                  <textarea
+                    required
+                    rows={2}
+                    placeholder="Short details shown to customers during checkout..."
+                    value={offerDescription}
+                    onChange={(e) => setOfferDescription(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsOfferModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-850 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer"
+                >
+                  {editingOffer ? 'Save Changes' : 'Create Offer'}
                 </button>
               </div>
             </form>

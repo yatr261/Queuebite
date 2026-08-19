@@ -74,6 +74,16 @@ export default function BookingWizardModal({
   const restaurant =
     state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
 
+  // Make sure the selected payment method is one of the accepted ones
+  useEffect(() => {
+    if (restaurant) {
+      const accepted = restaurant.acceptedPaymentMethods || ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'];
+      if (accepted.length > 0 && !accepted.includes(paymentMethod)) {
+        setPaymentMethod(accepted[0] as any);
+      }
+    }
+  }, [restaurant, restaurant?.acceptedPaymentMethods, paymentMethod]);
+
   // Re-calculate AI table allocation whenever inputs change
   const allocation = useMemo(() => {
     if (!restaurant) return null;
@@ -794,7 +804,10 @@ export default function BookingWizardModal({
                       { id: 'CARD', label: 'Credit/Debit Card', icon: '💳' },
                       { id: 'NETBANKING', label: 'Net Banking', icon: '🏦' },
                       { id: 'CASH_AT_DESK', label: 'Pay at Desk', icon: '💵' },
-                    ].map((pm) => (
+                    ].filter((pm) => {
+                      const accepted = restaurant.acceptedPaymentMethods || ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'];
+                      return accepted.includes(pm.id as any);
+                    }).map((pm) => (
                       <button
                         key={pm.id}
                         type="button"

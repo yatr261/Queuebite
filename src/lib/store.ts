@@ -14,6 +14,7 @@ import {
   Table,
   PortalUser,
   JobRole,
+  MenuItem,
 } from './types';
 import {
   INITIAL_RESTAURANTS,
@@ -854,9 +855,36 @@ class StateStore {
       read: false,
     };
 
+    const updatedKitchen = [...this.state.kitchenTickets];
+    if (data.preOrderItems && data.preOrderItems.length > 0) {
+      const now = new Date();
+      const targetServeDate = new Date(now.getTime() + estimatedWaitMinutes * 60 * 1000);
+      const prepDuration = 15;
+      const prepStartDate = new Date(targetServeDate.getTime() - prepDuration * 60 * 1000);
+      const prepStartTime = (prepStartDate > now ? prepStartDate : now).toTimeString().substring(0, 5);
+      const targetServeTime = targetServeDate.toTimeString().substring(0, 5);
+
+      const ticket: KitchenTicket = {
+        ticketId: `KT-${tokenId}`,
+        sourceType: 'LIVE_QUEUE',
+        sourceId: tokenId,
+        customerName: data.customerName,
+        tableNumber: 'Queue',
+        items: data.preOrderItems,
+        scheduledPrepTime: prepStartTime,
+        targetServeTime: targetServeTime,
+        prepDurationMinutes: prepDuration,
+        status: 'SCHEDULED',
+        specialNotes: `Live Queue pre-order for ${data.guestCount} guests. Est. wait: ~${estimatedWaitMinutes} mins.`,
+        createdAt: new Date().toISOString(),
+      };
+      updatedKitchen.push(ticket);
+    }
+
     this.state = {
       ...this.state,
       queueTokens: [newToken, ...this.state.queueTokens],
+      kitchenTickets: updatedKitchen,
       notifications: [notif, ...this.state.notifications],
     };
 
@@ -881,6 +909,16 @@ class StateStore {
       return q;
     });
 
+    const updatedKitchen = this.state.kitchenTickets.map((kt) => {
+      if (kt.sourceType === 'LIVE_QUEUE' && kt.sourceId === tokenId) {
+        return {
+          ...kt,
+          tableNumber: assignedTableNumber || 'T-1',
+        };
+      }
+      return kt;
+    });
+
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
       title: `Table Ready for Token ${tokenId} 🔔`,
@@ -893,6 +931,7 @@ class StateStore {
     this.state = {
       ...this.state,
       queueTokens: updated,
+      kitchenTickets: updatedKitchen,
       notifications: [notif, ...this.state.notifications],
     };
 
@@ -901,6 +940,7 @@ class StateStore {
   }
 
   public seatQueueToken(tokenId: string) {
+    const token = this.state.queueTokens.find((q) => q.tokenId === tokenId);
     const updated = this.state.queueTokens.map((q) => {
       if (q.tokenId === tokenId) {
         return { ...q, status: 'SEATED' as const };
@@ -908,7 +948,19 @@ class StateStore {
       return q;
     });
 
-    this.state = { ...this.state, queueTokens: updated };
+    const updatedKitchen = this.state.kitchenTickets.map((kt) => {
+      if (kt.sourceType === 'LIVE_QUEUE' && kt.sourceId === tokenId) {
+        return {
+          ...kt,
+          status: 'COOKING' as const,
+          startedCookingAt: new Date().toISOString(),
+          tableNumber: token?.assignedTableNumber || kt.tableNumber,
+        };
+      }
+      return kt;
+    });
+
+    this.state = { ...this.state, queueTokens: updated, kitchenTickets: updatedKitchen };
     playNotificationChime('success');
     this.notify();
   }
@@ -1029,6 +1081,77 @@ class StateStore {
       return rest;
     });
 
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
+  // --- Admin Menu & Offers/Schemes Modifiers ---
+  public addMenuItem(restaurantId: string, item: MenuItem) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          menu: [...rest.menu, item],
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
+  public updateMenuItem(restaurantId: string, itemId: string, updates: Partial<MenuItem>) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          menu: rest.menu.map((m) => (m.id === itemId ? { ...m, ...updates } : m)),
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
+  public deleteMenuItem(restaurantId: string, itemId: string) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          menu: rest.menu.filter((m) => m.id !== itemId),
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
+  public addOffer(restaurantId: string, offer: Restaurant['offers'][0]) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          offers: [...(rest.offers || []), offer],
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
+  public deleteOffer(restaurantId: string, offerCode: string) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          offers: (rest.offers || []).filter((o) => o.code !== offerCode),
+        };
+      }
+      return rest;
+    });
     this.state = { ...this.state, restaurants: updatedRestaurants };
     this.notify();
   }
