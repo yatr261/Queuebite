@@ -15,6 +15,7 @@ import {
   PortalUser,
   JobRole,
   MenuItem,
+  DailySpecial,
 } from './types';
 import {
   INITIAL_RESTAURANTS,
@@ -1086,6 +1087,50 @@ class StateStore {
   }
 
   // --- Admin Menu & Offers/Schemes Modifiers ---
+  public addDailySpecial(restaurantId: string, special: DailySpecial) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          dailySpecials: [...(rest.dailySpecials || []), special],
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
+  public updateDailySpecial(restaurantId: string, specialId: string, updates: Partial<DailySpecial>) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          dailySpecials: (rest.dailySpecials || []).map((s) =>
+            s.id === specialId ? { ...s, ...updates } : s
+          ),
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
+  public deleteDailySpecial(restaurantId: string, specialId: string) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          dailySpecials: (rest.dailySpecials || []).filter((s) => s.id !== specialId),
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
   public addMenuItem(restaurantId: string, item: MenuItem) {
     const updatedRestaurants = this.state.restaurants.map((rest) => {
       if (rest.id === restaurantId) {

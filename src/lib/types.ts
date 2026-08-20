@@ -40,6 +40,12 @@ export interface MenuItem {
   calories?: number;
 }
 
+export interface DailySpecial extends MenuItem {
+  date: string; // "YYYY-MM-DD"
+  menuItemId?: string; // Reference to existing menu item, if any
+  discountNote?: string; // e.g. "Buy 1 Get 1 Free" or "20% Off today only"
+}
+
 export interface PreOrderItem {
   item: MenuItem;
   quantity: number;
@@ -157,6 +163,7 @@ export interface Restaurant {
   depositAmount: number; // 200
   tables: Table[];
   menu: MenuItem[];
+  dailySpecials?: DailySpecial[];
   currentOccupancy: number; // percentage e.g. 75
   totalTables: number;
   availableTables: number;

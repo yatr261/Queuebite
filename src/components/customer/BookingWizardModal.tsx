@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { store, AppState } from '@/lib/store';
-import { TableSection, PreOrderItem, MenuItem, Reservation } from '@/lib/types';
+import { TableSection, PreOrderItem, MenuItem, DailySpecial, Reservation } from '@/lib/types';
 import {
   formatCurrency,
   formatDate,
@@ -119,7 +119,8 @@ export default function BookingWizardModal({
   const selectedPreOrderItems: PreOrderItem[] = Object.entries(preOrderCart)
     .filter(([_, qty]) => qty > 0)
     .map(([itemId, qty]) => {
-      const item = restaurant.menu.find((m) => m.id === itemId)!;
+      const item = restaurant.menu.find((m) => m.id === itemId) ||
+                   restaurant.dailySpecials?.find((s) => s.id === itemId)!;
       return { item, quantity: qty };
     });
 
@@ -622,6 +623,94 @@ export default function BookingWizardModal({
 
               {/* Pre-Order Menu List */}
               <div className="max-h-72 overflow-y-auto space-y-2.5 pr-1">
+                {/* Daily Specials for this date */}
+                {restaurant.dailySpecials && restaurant.dailySpecials.filter(s => s.date === date).length > 0 && (
+                  <div className="space-y-2.5 mb-4 border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                    <p className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" /> Specials for {formatDate(date)}:
+                    </p>
+                    
+                    {restaurant.dailySpecials.filter(s => s.date === date).map((special) => {
+                      const qty = preOrderCart[special.id] || 0;
+                      return (
+                        <div
+                          key={special.id}
+                          className="p-3 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 dark:border-amber-500/30 flex items-center justify-between gap-3 relative"
+                        >
+                          {special.discountNote && (
+                            <span className="absolute top-1 left-1 px-1.5 py-0.2 rounded bg-amber-500 text-zinc-955 text-[8px] font-black uppercase tracking-wider shadow z-10">
+                              {special.discountNote}
+                            </span>
+                          )}
+
+                          <img
+                            src={special.image}
+                            alt={special.name}
+                            className="w-14 h-14 rounded-xl object-cover shrink-0"
+                          />
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mt-2">
+                              <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                                {special.name}
+                              </h4>
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                  special.dietary === 'NON_VEG'
+                                    ? 'bg-rose-500/10 text-rose-500'
+                                    : 'bg-emerald-500/10 text-emerald-500'
+                                }`}
+                              >
+                                {special.dietary === 'NON_VEG' ? 'NV' : 'VEG'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-zinc-500 truncate">{special.description}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400">
+                                {formatCurrency(special.price)}
+                              </span>
+                              {special.menuItemId && (
+                                <span className="text-[10px] text-zinc-400 line-through">
+                                  {formatCurrency(restaurant.menu.find(m => m.id === special.menuItemId)?.price || 0)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quantity Stepper */}
+                          <div className="flex items-center gap-2">
+                            {qty === 0 ? (
+                              <button
+                                onClick={() => handleQuantityChange(special.id, 1)}
+                                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm transition-all active:scale-95"
+                              >
+                                Add
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-700 p-1 rounded-xl">
+                                <button
+                                  onClick={() => handleQuantityChange(special.id, -1)}
+                                  className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white flex items-center justify-center text-xs font-bold"
+                                >
+                                  -
+                                </button>
+                                <span className="text-xs font-bold px-1.5">{qty}</span>
+                                <button
+                                  onClick={() => handleQuantityChange(special.id, 1)}
+                                  className="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center text-xs font-bold"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                <p className="text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-2">Dine-in Menu Items:</p>
                 {restaurant.menu.map((item) => {
                   const qty = preOrderCart[item.id] || 0;
                   return (

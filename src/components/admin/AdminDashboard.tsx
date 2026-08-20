@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { store, AppState } from '@/lib/store';
-import { Reservation, Table, QueueToken, PortalUser, JobRole, MenuItem, DietaryType, Restaurant } from '@/lib/types';
+import { Reservation, Table, QueueToken, PortalUser, JobRole, MenuItem, DailySpecial, DietaryType, Restaurant } from '@/lib/types';
 import { formatDate, formatTime12h, formatCurrency, getTodayDateString } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -1404,7 +1404,7 @@ const PRESET_FOOD_IMAGES = [
 
 function MenuOffersView({ state }: { state: AppState }) {
   const categories = ['All', 'Starters', 'Main Course', 'Dosa', 'Pizza', 'Burgers', 'Beverages', 'Desserts', 'Combos'];
-  const [subTab, setSubTab] = useState<'MENU' | 'OFFERS'>('MENU');
+  const [subTab, setSubTab] = useState<'MENU' | 'OFFERS' | 'SPECIALS'>('MENU');
   const [menuSearch, setMenuSearch] = useState('');
   
   // Menu Item Modal form states
@@ -1430,6 +1430,16 @@ function MenuOffersView({ state }: { state: AppState }) {
   const [offerDiscountType, setOfferDiscountType] = useState<'PERCENT' | 'FLAT'>('PERCENT');
   const [offerDiscountValue, setOfferDiscountValue] = useState(10);
   const [offerMinOrder, setOfferMinOrder] = useState(0);
+
+  // Daily Specials modal form states
+  const [isSpecialModalOpen, setIsSpecialModalOpen] = useState(false);
+  const [editingSpecial, setEditingSpecial] = useState<DailySpecial | null>(null);
+  const [specialDate, setSpecialDate] = useState(getTodayDateString());
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('custom');
+  const [specialDiscountNote, setSpecialDiscountNote] = useState('');
+  
+  // Daily Specials list state
+  const [specialFilterDate, setSpecialFilterDate] = useState(getTodayDateString());
 
   // Alerts
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -1483,6 +1493,115 @@ function MenuOffersView({ state }: { state: AppState }) {
       triggerSuccess('Dish removed from menu.');
     }
   };
+
+  const resetSpecialForm = () => {
+    setEditingSpecial(null);
+    setSpecialDate(getTodayDateString());
+    setSelectedMenuItemId('custom');
+    setSpecialDiscountNote('');
+    setItemName('');
+    setItemCategory('Starters');
+    setItemPrice(150);
+    setItemDescription('');
+    setItemImage('');
+    setItemDietary('VEG');
+    setItemSpiceLevel('Medium');
+    setItemPrepTime(15);
+    setItemCalories(300);
+    setItemIsPopular(false);
+  };
+
+  const handleEditSpecial = (special: DailySpecial) => {
+    setEditingSpecial(special);
+    setSpecialDate(special.date);
+    setSelectedMenuItemId(special.menuItemId || 'custom');
+    setSpecialDiscountNote(special.discountNote || '');
+    setItemName(special.name);
+    setItemCategory(special.category);
+    setItemPrice(special.price);
+    setItemDescription(special.description);
+    setItemImage(special.image);
+    setItemDietary(special.dietary);
+    setItemSpiceLevel(special.spiceLevel || 'Medium');
+    setItemPrepTime(special.prepTimeMinutes);
+    setItemCalories(special.calories || 300);
+    setItemIsPopular(!!special.isPopular);
+    setIsSpecialModalOpen(true);
+  };
+
+  const handleDeleteSpecial = (specialId: string) => {
+    if (confirm('Are you sure you want to remove this daily special?')) {
+      store.deleteDailySpecial(restaurant.id, specialId);
+      triggerSuccess('Daily special removed.');
+    }
+  };
+
+  const handleSaveSpecial = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!itemName.trim() || !itemDescription.trim() || !itemImage.trim() || !specialDate) {
+      triggerError('Please fill out all required fields.');
+      return;
+    }
+
+    const payload: DailySpecial = {
+      id: editingSpecial ? editingSpecial.id : `special-${Date.now()}`,
+      name: itemName.trim(),
+      category: itemCategory,
+      price: Number(itemPrice),
+      description: itemDescription.trim(),
+      image: itemImage.trim(),
+      dietary: itemDietary,
+      spiceLevel: itemSpiceLevel,
+      prepTimeMinutes: Number(itemPrepTime),
+      calories: Number(itemCalories),
+      isPopular: itemIsPopular,
+      date: specialDate,
+      menuItemId: selectedMenuItemId !== 'custom' ? selectedMenuItemId : undefined,
+      discountNote: specialDiscountNote.trim() || undefined,
+    };
+
+    if (editingSpecial) {
+      store.updateDailySpecial(restaurant.id, editingSpecial.id, payload);
+      triggerSuccess('Daily special updated successfully!');
+    } else {
+      store.addDailySpecial(restaurant.id, payload);
+      triggerSuccess('New daily special added!');
+    }
+
+    setIsSpecialModalOpen(false);
+    resetSpecialForm();
+  };
+
+  const handleSelectMenuItem = (id: string) => {
+    setSelectedMenuItemId(id);
+    if (id === 'custom') {
+      setItemName('');
+      setItemCategory('Starters');
+      setItemPrice(150);
+      setItemDescription('');
+      setItemImage('');
+      setItemDietary('VEG');
+      setItemSpiceLevel('Medium');
+      setItemPrepTime(15);
+      setItemCalories(300);
+      setItemIsPopular(false);
+    } else {
+      const match = restaurant.menu.find((m) => m.id === id);
+      if (match) {
+        setItemName(match.name);
+        setItemCategory(match.category);
+        setItemPrice(match.price);
+        setItemDescription(match.description);
+        setItemImage(match.image);
+        setItemDietary(match.dietary);
+        setItemSpiceLevel(match.spiceLevel || 'Medium');
+        setItemPrepTime(match.prepTimeMinutes);
+        setItemCalories(match.calories || 300);
+        setItemIsPopular(!!match.isPopular);
+      }
+    }
+  };
+
 
   const handleSaveItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1623,6 +1742,16 @@ function MenuOffersView({ state }: { state: AppState }) {
             Menu Directory ({restaurant.menu.length} Items)
           </button>
           <button
+            onClick={() => setSubTab('SPECIALS')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              subTab === 'SPECIALS'
+                ? 'bg-zinc-900 dark:bg-zinc-850 text-white border border-zinc-700 dark:border-zinc-650'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            Daily Specials ({restaurant.dailySpecials?.length || 0})
+          </button>
+          <button
             onClick={() => setSubTab('OFFERS')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               subTab === 'OFFERS'
@@ -1634,7 +1763,7 @@ function MenuOffersView({ state }: { state: AppState }) {
           </button>
         </div>
 
-        {subTab === 'MENU' ? (
+        {subTab === 'MENU' && (
           <button
             onClick={() => {
               resetMenuForm();
@@ -1644,7 +1773,8 @@ function MenuOffersView({ state }: { state: AppState }) {
           >
             <Plus className="w-4 h-4" /> Add Dish
           </button>
-        ) : (
+        )}
+        {subTab === 'OFFERS' && (
           <button
             onClick={() => {
               resetOfferForm();
@@ -1653,6 +1783,17 @@ function MenuOffersView({ state }: { state: AppState }) {
             className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/10 cursor-pointer animate-in fade-in"
           >
             <Plus className="w-4 h-4" /> Create Offer Scheme
+          </button>
+        )}
+        {subTab === 'SPECIALS' && (
+          <button
+            onClick={() => {
+              resetSpecialForm();
+              setIsSpecialModalOpen(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/10 cursor-pointer animate-in fade-in"
+          >
+            <Plus className="w-4 h-4" /> Add Daily Special
           </button>
         )}
       </div>
@@ -1808,6 +1949,107 @@ function MenuOffersView({ state }: { state: AppState }) {
               <p className="text-zinc-500 font-bold">No active promotional discount schemes. Create one!</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* SUBTAB 3: DAILY SPECIALS */}
+      {subTab === 'SPECIALS' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+            <span className="text-xs font-bold text-zinc-500">Filter Specials by Date:</span>
+            <input
+              type="date"
+              value={specialFilterDate}
+              onChange={(e) => setSpecialFilterDate(e.target.value)}
+              className="px-3.5 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 text-xs font-bold focus:outline-none text-zinc-800 dark:text-zinc-100"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {((restaurant.dailySpecials || []).filter((s) => s.date === specialFilterDate)).map((special) => (
+              <div
+                key={special.id}
+                className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-300 relative overflow-hidden"
+              >
+                {special.discountNote && (
+                  <div className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-955 font-black text-[9px] uppercase tracking-wider flex items-center gap-1 shadow">
+                    <Sparkles className="w-3 h-3" /> {special.discountNote}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <img
+                      src={special.image}
+                      alt={special.name}
+                      className="w-16 h-16 rounded-2xl object-cover shrink-0 bg-zinc-100 border border-zinc-200 dark:border-zinc-800"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider ${
+                            special.dietary === 'NON_VEG'
+                              ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                              : special.dietary === 'VEGAN'
+                              ? 'bg-green-500/10 text-green-600 border border-green-550/20'
+                              : 'bg-emerald-500/10 text-emerald-600 border border-emerald-555/20'
+                          }`}
+                        >
+                          {special.dietary === 'NON_VEG' ? 'Non-Veg' : special.dietary === 'VEGAN' ? 'Vegan' : 'Veg'}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-bold bg-zinc-100 dark:bg-zinc-850 px-1.5 py-0.2 rounded">
+                          {special.category}
+                        </span>
+                      </div>
+                      <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white truncate mt-1">
+                        {special.name}
+                      </h4>
+                      <p className="text-xs font-black text-amber-600 mt-0.5">{formatCurrency(special.price)}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-zinc-500 text-[11px] leading-relaxed line-clamp-2">
+                    {special.description}
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-zinc-100 dark:border-zinc-800 text-center text-zinc-650 dark:text-zinc-400">
+                    <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
+                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Prep Time</span>
+                      <span className="font-black text-zinc-700 dark:text-zinc-300">{special.prepTimeMinutes} mins</span>
+                    </div>
+                    <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
+                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Spice</span>
+                      <span className="font-black text-zinc-700 dark:text-zinc-300">{special.spiceLevel || 'Medium'}</span>
+                    </div>
+                    <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
+                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Calories</span>
+                      <span className="font-black text-zinc-700 dark:text-zinc-300">{special.calories || 300} kcal</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                  <button
+                    onClick={() => handleEditSpecial(special)}
+                    className="flex-1 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-855 text-zinc-700 dark:text-zinc-300 font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Edit2 className="w-3 h-3" /> Modify
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSpecial(special.id)}
+                    className="flex-1 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/30 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" /> Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+            {((restaurant.dailySpecials || []).filter((s) => s.date === specialFilterDate)).length === 0 && (
+              <div className="col-span-full text-center py-12 bg-zinc-50 dark:bg-zinc-850 rounded-3xl border border-zinc-200 dark:border-zinc-800">
+                <p className="text-zinc-500 font-bold">No specials defined for this date. Create one!</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -2115,6 +2357,245 @@ function MenuOffersView({ state }: { state: AppState }) {
                   className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer"
                 >
                   {editingOffer ? 'Save Changes' : 'Create Offer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DAILY SPECIAL FORM MODAL */}
+      {isSpecialModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-xl max-h-[90vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-3xl shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200 flex flex-col overflow-hidden text-zinc-800 dark:text-zinc-200">
+            <div className="flex justify-between items-center pb-1 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+              <h3 className="text-base font-black text-zinc-900 dark:text-white">
+                {editingSpecial ? 'Update Daily Special' : 'Add Date-Specific Daily Special'}
+              </h3>
+              <button
+                onClick={() => setIsSpecialModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-850 text-zinc-400 cursor-pointer"
+              >
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSpecial} className="space-y-4 overflow-y-auto flex-1 pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-[11px]">
+                {/* Date Selection */}
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Target Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={specialDate}
+                    onChange={(e) => setSpecialDate(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                {/* Base Dish Selection */}
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Base Menu Item</label>
+                  <select
+                    value={selectedMenuItemId}
+                    onChange={(e) => handleSelectMenuItem(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  >
+                    <option value="custom">Custom (Create from Scratch)</option>
+                    {restaurant.menu.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} (₹{m.price})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Special Dish Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Special Chili Paneer"
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-805 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Special Price (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    min={10}
+                    value={itemPrice}
+                    onChange={(e) => setItemPrice(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Daily Offer Tag / Discount Note</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 15% OFF, Buy 1 Get 1, Monsoon Special"
+                    value={specialDiscountNote}
+                    onChange={(e) => setSpecialDiscountNote(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Menu Category</label>
+                  <select
+                    value={itemCategory}
+                    onChange={(e) => setItemCategory(e.target.value as any)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  >
+                    {categories.filter(c => c !== 'All').map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Prep Time (minutes)</label>
+                  <input
+                    type="number"
+                    required
+                    min={2}
+                    value={itemPrepTime}
+                    onChange={(e) => setItemPrepTime(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Calories (kcal)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={itemCalories}
+                    onChange={(e) => setItemCalories(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Spice Heat Level</label>
+                  <select
+                    value={itemSpiceLevel}
+                    onChange={(e) => setItemSpiceLevel(e.target.value as any)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-855 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  >
+                    <option value="Mild">Mild</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Spicy">Spicy</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1 block">Dietary Preference</label>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    {[
+                      { id: 'VEG', label: 'Vegetarian', icon: '🟢' },
+                      { id: 'NON_VEG', label: 'Non-Vegetarian', icon: '🔴' },
+                      { id: 'VEGAN', label: 'Vegan', icon: '🌱' },
+                    ].map((opt) => {
+                      const isSel = itemDietary === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setItemDietary(opt.id as any)}
+                          className={`p-2.5 rounded-xl border text-center transition-all font-bold cursor-pointer ${
+                            isSel
+                              ? 'border-amber-500 ring-2 ring-amber-500 bg-amber-500/10 text-amber-600 font-black'
+                              : 'border-zinc-200 dark:border-zinc-800 text-zinc-650 dark:text-zinc-400 hover:border-zinc-300'
+                          }`}
+                        >
+                          <span className="mr-1">{opt.icon}</span>
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Dish Image / Photo URL</label>
+                    <span className="text-[10px] text-zinc-400">Choose from presets below or paste custom URL</span>
+                  </div>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://example.com/food.jpg"
+                    value={itemImage}
+                    onChange={(e) => setItemImage(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-mono text-[10px]"
+                  />
+                  
+                  {/* Preset Visual Photo Select Gallery */}
+                  <div className="space-y-1 pt-1.5">
+                    <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">Quick Select Preset Food Photos:</span>
+                    <div className="flex gap-2 overflow-x-auto pb-1 bg-zinc-50 dark:bg-zinc-855 p-2 rounded-2xl border border-zinc-200 dark:border-zinc-800 scrollbar-thin">
+                      {PRESET_FOOD_IMAGES.map((img, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => setItemImage(img.url)}
+                          className={`shrink-0 border-2 rounded-xl overflow-hidden hover:opacity-100 transition-all flex flex-col items-center p-1 bg-white dark:bg-zinc-900 cursor-pointer ${
+                            itemImage === img.url ? 'border-amber-500 opacity-100 shadow' : 'border-transparent opacity-60'
+                          }`}
+                        >
+                          <img src={img.url} alt={img.name} className="w-10 h-10 object-cover rounded-lg" />
+                          <span className="text-[8px] font-bold text-zinc-500 dark:text-zinc-400 max-w-16 truncate mt-0.5">{img.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Dish Description</label>
+                  <textarea
+                    required
+                    rows={2}
+                    placeholder="Describe main ingredients, taste profile, allergens..."
+                    value={itemDescription}
+                    onChange={(e) => setItemDescription(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-805 dark:text-zinc-100 font-medium"
+                  />
+                </div>
+
+                <div className="md:col-span-2 py-1">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-zinc-700 dark:text-zinc-350">
+                    <input
+                      type="checkbox"
+                      checked={itemIsPopular}
+                      onChange={(e) => setItemIsPopular(e.target.checked)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>Highlight as &quot;Chef&apos;s Special / Popular&quot; on customer menu</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-3 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsSpecialModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-850 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer"
+                >
+                  {editingSpecial ? 'Save Changes' : 'Save Special'}
                 </button>
               </div>
             </form>

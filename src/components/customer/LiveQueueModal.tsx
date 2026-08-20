@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { store, AppState } from '@/lib/store';
-import { TableSection, QueueToken, PreOrderItem } from '@/lib/types';
-import { formatCurrency } from '@/lib/utils';
+import { TableSection, QueueToken, PreOrderItem, DailySpecial } from '@/lib/types';
+import { formatCurrency, getTodayDateString, formatDate } from '@/lib/utils';
 import {
   X,
   Clock,
@@ -16,6 +16,7 @@ import {
   Plus,
   Minus,
   CreditCard,
+  Sparkles,
 } from 'lucide-react';
 
 export default function LiveQueueModal({
@@ -90,7 +91,8 @@ export default function LiveQueueModal({
   const selectedPreOrderItems: PreOrderItem[] = Object.entries(preOrderCart)
     .filter(([_, qty]) => qty > 0)
     .map(([itemId, qty]) => {
-      const item = restaurant.menu.find((m) => m.id === itemId)!;
+      const item = restaurant.menu.find((m) => m.id === itemId) ||
+                   restaurant.dailySpecials?.find((s) => s.id === itemId)!;
       return { item, quantity: qty };
     });
 
@@ -347,6 +349,96 @@ export default function LiveQueueModal({
 
               {/* Menu items grid */}
               <div className="max-h-72 overflow-y-auto space-y-2.5 pr-1.5">
+                {/* Daily Specials for Today */}
+                {restaurant.dailySpecials && restaurant.dailySpecials.filter(s => s.date === getTodayDateString()).length > 0 && (
+                  <div className="space-y-2.5 mb-4 border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                    <p className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Today&apos;s Specials & Offers:
+                    </p>
+                    
+                    {restaurant.dailySpecials.filter(s => s.date === getTodayDateString()).map((special) => {
+                      const qty = preOrderCart[special.id] || 0;
+                      return (
+                        <div
+                          key={special.id}
+                          className="p-3 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 dark:border-amber-500/30 flex items-center justify-between gap-3 relative"
+                        >
+                          {special.discountNote && (
+                            <span className="absolute top-1 left-1 px-1.5 py-0.2 rounded bg-amber-500 text-zinc-955 text-[8px] font-black uppercase tracking-wider shadow z-10">
+                              {special.discountNote}
+                            </span>
+                          )}
+
+                          <img
+                            src={special.image}
+                            alt={special.name}
+                            className="w-14 h-14 rounded-xl object-cover shrink-0 bg-zinc-205"
+                          />
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mt-2">
+                              <h5 className="font-bold text-zinc-900 dark:text-white truncate">
+                                {special.name}
+                              </h5>
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0 ${
+                                  special.dietary === 'NON_VEG'
+                                    ? 'bg-rose-500/15 text-rose-500'
+                                    : special.dietary === 'VEGAN'
+                                    ? 'bg-green-500/15 text-green-500'
+                                    : 'bg-emerald-500/15 text-emerald-555'
+                                }`}
+                              >
+                                {special.dietary === 'NON_VEG' ? 'NON-VEG' : special.dietary === 'VEGAN' ? 'VEGAN' : 'VEG'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-zinc-550 truncate mt-0.5">{special.description}</p>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+                                {formatCurrency(special.price)}
+                              </span>
+                              {special.menuItemId && (
+                                <span className="text-[10px] text-zinc-400 line-through">
+                                  {formatCurrency(restaurant.menu.find(m => m.id === special.menuItemId)?.price || 0)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Add/Quantity counter */}
+                          <div className="shrink-0">
+                            {qty === 0 ? (
+                              <button
+                                onClick={() => handleQuantityChange(special.id, 1)}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-sm transition-all"
+                              >
+                                Add
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5 bg-zinc-200 dark:bg-zinc-800 p-1 rounded-xl border border-zinc-300 dark:border-zinc-700">
+                                <button
+                                  onClick={() => handleQuantityChange(special.id, -1)}
+                                  className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-750 text-zinc-900 dark:text-white flex items-center justify-center font-bold"
+                                >
+                                  -
+                                </button>
+                                <span className="font-bold px-1 text-zinc-900 dark:text-white">{qty}</span>
+                                <button
+                                  onClick={() => handleQuantityChange(special.id, 1)}
+                                  className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                <p className="text-xs font-bold text-zinc-600 dark:text-zinc-400 mb-2">Regular Menu:</p>
                 {filteredMenu.map((item) => {
                   const qty = preOrderCart[item.id] || 0;
                   return (

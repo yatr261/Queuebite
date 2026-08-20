@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { store } from '@/lib/store';
-import { Restaurant, MenuItem, DietaryType } from '@/lib/types';
-import { formatCurrency } from '@/lib/utils';
+import { Restaurant, MenuItem, DailySpecial, DietaryType } from '@/lib/types';
+import { formatCurrency, getTodayDateString } from '@/lib/utils';
 import {
   Sparkles,
   Clock,
@@ -177,6 +177,83 @@ export default function RestaurantDetail({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Today's Specials Section */}
+      {restaurant.dailySpecials && restaurant.dailySpecials.filter(s => s.date === getTodayDateString()).length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
+            Today&apos;s Specials & Deals
+          </h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {restaurant.dailySpecials.filter(s => s.date === getTodayDateString()).map((special) => (
+              <div
+                key={special.id}
+                className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-amber-50/10 dark:bg-amber-955/5 p-4 space-y-3 hover:shadow-lg transition-all duration-300 group flex flex-col justify-between"
+              >
+                {special.discountNote && (
+                  <div className="absolute top-2 right-2 px-2.5 py-0.5 rounded-lg bg-amber-500 text-zinc-955 text-[10px] font-black uppercase tracking-wider shadow z-10">
+                    {special.discountNote}
+                  </div>
+                )}
+
+                <div className="space-y-2.5">
+                  <div className="relative h-44 w-full overflow-hidden rounded-xl bg-zinc-850 shrink-0">
+                    <img
+                      src={special.image}
+                      alt={special.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-amber-400" />
+                      {special.prepTimeMinutes}m prep
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="text-sm font-bold text-zinc-900 dark:text-white truncate">{special.name}</h4>
+                      <div className="text-right shrink-0">
+                        <span className="text-sm font-black text-amber-600 dark:text-amber-400">
+                          {formatCurrency(special.price)}
+                        </span>
+                        {special.menuItemId && (
+                          <span className="text-[10px] text-zinc-400 line-through block leading-none">
+                            {formatCurrency(restaurant.menu.find(m => m.id === special.menuItemId)?.price || 0)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1 line-clamp-2">
+                      {special.description}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50 mt-3 text-[11px]">
+                  <span
+                    className={`inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-md ${
+                      special.dietary === 'NON_VEG'
+                        ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    }`}
+                  >
+                    {special.dietary === 'NON_VEG' ? '🍗 Non-Veg' : '🥬 Pure Veg'}
+                  </span>
+
+                  <button
+                    onClick={() => store.setActiveBookingModal(true)}
+                    className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500 flex items-center gap-1"
+                  >
+                    Pre-Order in Booking →
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
