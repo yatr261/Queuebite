@@ -1960,7 +1960,7 @@ function MenuOffersView({ state }: { state: AppState }) {
       {subTab === 'SPECIALS' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-            <span className="text-xs font-bold text-zinc-500">Filter Specials by Date:</span>
+            <span className="text-xs font-bold text-black dark:text-zinc-300">Filter Specials by Date:</span>
             <input
               type="date"
               value={specialFilterDate}
@@ -2001,32 +2001,32 @@ function MenuOffersView({ state }: { state: AppState }) {
                         >
                           {special.dietary === 'NON_VEG' ? 'Non-Veg' : special.dietary === 'VEGAN' ? 'Vegan' : 'Veg'}
                         </span>
-                        <span className="text-[10px] text-zinc-400 font-bold bg-zinc-100 dark:bg-zinc-850 px-1.5 py-0.2 rounded">
+                        <span className="text-[10px] text-zinc-800 dark:text-zinc-300 font-bold bg-zinc-100 dark:bg-zinc-850 px-1.5 py-0.2 rounded">
                           {special.category}
                         </span>
                       </div>
-                      <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white truncate mt-1">
+                      <h4 className="font-extrabold text-sm text-black dark:text-white truncate mt-1">
                         {special.name}
                       </h4>
                       <p className="text-xs font-black text-amber-600 mt-0.5">{formatCurrency(special.price)}</p>
                     </div>
                   </div>
 
-                  <p className="text-zinc-500 text-[11px] leading-relaxed line-clamp-2">
+                  <p className="text-black dark:text-zinc-300 text-[11px] leading-relaxed line-clamp-2 font-medium">
                     {special.description}
                   </p>
 
                   <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-zinc-100 dark:border-zinc-800 text-center text-zinc-650 dark:text-zinc-400">
                     <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
-                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Prep Time</span>
+                      <span className="text-zinc-900 dark:text-zinc-400 text-[9px] uppercase font-bold block">Prep Time</span>
                       <span className="font-black text-zinc-700 dark:text-zinc-300">{special.prepTimeMinutes} mins</span>
                     </div>
                     <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
-                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Spice</span>
+                      <span className="text-zinc-900 dark:text-zinc-400 text-[9px] uppercase font-bold block">Spice</span>
                       <span className="font-black text-zinc-700 dark:text-zinc-300">{special.spiceLevel || 'Medium'}</span>
                     </div>
                     <div className="p-1.5 bg-zinc-50 dark:bg-zinc-850 rounded-xl">
-                      <span className="text-zinc-400 text-[9px] uppercase font-bold block">Calories</span>
+                      <span className="text-zinc-900 dark:text-zinc-400 text-[9px] uppercase font-bold block">Calories</span>
                       <span className="font-black text-zinc-700 dark:text-zinc-300">{special.calories || 300} kcal</span>
                     </div>
                   </div>

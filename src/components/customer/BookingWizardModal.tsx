@@ -651,7 +651,7 @@ export default function BookingWizardModal({
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 mt-2">
-                              <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                              <h4 className="text-xs font-bold text-black dark:text-white truncate">
                                 {special.name}
                               </h4>
                               <span
@@ -664,7 +664,7 @@ export default function BookingWizardModal({
                                 {special.dietary === 'NON_VEG' ? 'NV' : 'VEG'}
                               </span>
                             </div>
-                            <p className="text-[11px] text-zinc-500 truncate">{special.description}</p>
+                            <p className="text-[11px] text-black dark:text-zinc-300 truncate font-medium">{special.description}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400">
                                 {formatCurrency(special.price)}

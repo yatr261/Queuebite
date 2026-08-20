@@ -377,7 +377,7 @@ export default function LiveQueueModal({
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 mt-2">
-                              <h5 className="font-bold text-zinc-900 dark:text-white truncate">
+                              <h5 className="font-bold text-black dark:text-white truncate">
                                 {special.name}
                               </h5>
                               <span
@@ -392,7 +392,7 @@ export default function LiveQueueModal({
                                 {special.dietary === 'NON_VEG' ? 'NON-VEG' : special.dietary === 'VEGAN' ? 'VEGAN' : 'VEG'}
                               </span>
                             </div>
-                            <p className="text-[11px] text-zinc-550 truncate mt-0.5">{special.description}</p>
+                            <p className="text-[11px] text-black dark:text-zinc-300 truncate mt-0.5 font-medium">{special.description}</p>
                             <div className="flex items-center gap-1.5 mt-1">
                               <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
                                 {formatCurrency(special.price)}

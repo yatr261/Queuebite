@@ -215,7 +215,7 @@ export default function RestaurantDetail({
 
                   <div>
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className="text-sm font-bold text-zinc-900 dark:text-white truncate">{special.name}</h4>
+                      <h4 className="text-sm font-bold text-black dark:text-white truncate">{special.name}</h4>
                       <div className="text-right shrink-0">
                         <span className="text-sm font-black text-amber-600 dark:text-amber-400">
                           {formatCurrency(special.price)}
@@ -227,7 +227,7 @@ export default function RestaurantDetail({
                         )}
                       </div>
                     </div>
-                    <p className="text-xs text-zinc-500 mt-1 line-clamp-2">
+                    <p className="text-xs text-black dark:text-zinc-300 mt-1 line-clamp-2 font-medium">
                       {special.description}
                     </p>
                   </div>
