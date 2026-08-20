@@ -1502,8 +1502,8 @@ function MenuOffersView({ state }: { state: AppState }) {
     setItemName('');
     setItemCategory('Starters');
     setItemPrice(150);
-    setItemDescription('');
-    setItemImage('');
+    setItemDescription("Chef's selection of the day.");
+    setItemImage('https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=500&auto=format&fit=crop&q=80');
     setItemDietary('VEG');
     setItemSpiceLevel('Medium');
     setItemPrepTime(15);
@@ -1538,18 +1538,21 @@ function MenuOffersView({ state }: { state: AppState }) {
 
   const handleSaveSpecial = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemName.trim() || !itemDescription.trim() || !itemImage.trim() || !specialDate) {
-      triggerError('Please fill out all required fields.');
+    if (!itemName.trim() || !specialDate) {
+      triggerError('Please fill out the dish name.');
       return;
     }
+
+    const finalImage = itemImage.trim() || 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=500&auto=format&fit=crop&q=80';
+    const finalDescription = itemDescription.trim() || "Chef's selection of the day.";
 
     const payload: DailySpecial = {
       id: editingSpecial ? editingSpecial.id : `special-${Date.now()}`,
       name: itemName.trim(),
       category: itemCategory,
       price: Number(itemPrice),
-      description: itemDescription.trim(),
-      image: itemImage.trim(),
+      description: finalDescription,
+      image: finalImage,
       dietary: itemDietary,
       spiceLevel: itemSpiceLevel,
       prepTimeMinutes: Number(itemPrepTime),
@@ -1568,6 +1571,7 @@ function MenuOffersView({ state }: { state: AppState }) {
       triggerSuccess('New daily special added!');
     }
 
+    setSpecialFilterDate(specialDate); // Automatically switch the view to the added special's date!
     setIsSpecialModalOpen(false);
     resetSpecialForm();
   };
@@ -1578,8 +1582,8 @@ function MenuOffersView({ state }: { state: AppState }) {
       setItemName('');
       setItemCategory('Starters');
       setItemPrice(150);
-      setItemDescription('');
-      setItemImage('');
+      setItemDescription("Chef's selection of the day.");
+      setItemImage('https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=500&auto=format&fit=crop&q=80');
       setItemDietary('VEG');
       setItemSpiceLevel('Medium');
       setItemPrepTime(15);
