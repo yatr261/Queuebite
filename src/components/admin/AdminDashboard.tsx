@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { store, AppState } from '@/lib/store';
-import { Reservation, Table, QueueToken, PortalUser, JobRole, MenuItem, DailySpecial, DietaryType, Restaurant } from '@/lib/types';
+import { Reservation, Table, TableSection, QueueToken, PortalUser, JobRole, MenuItem, DailySpecial, DietaryType, Restaurant } from '@/lib/types';
 import { formatDate, formatTime12h, formatCurrency, getTodayDateString } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -37,9 +37,30 @@ import {
 
 export default function AdminDashboard() {
   const [state, setState] = React.useState<AppState>(store.getState());
-  const [adminTab, setAdminTab] = useState<'OVERVIEW' | 'RESERVATIONS' | 'FLOOR_PLAN' | 'TIMELINE' | 'QUEUE' | 'MENU' | 'SETTINGS' | 'STAFF'>('OVERVIEW');
+  const [adminTab, setAdminTab] = useState<'OVERVIEW' | 'RESERVATIONS' | 'TABLES_DIR' | 'TIMELINE' | 'QUEUE' | 'MENU' | 'SETTINGS' | 'STAFF'>('OVERVIEW');
   const [resFilter, setResFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Seating Table Form State
+  const [isTableModalOpen, setIsTableModalOpen] = useState(false);
+  const [newTableNumber, setNewTableNumber] = useState('');
+  const [newTableCapacity, setNewTableCapacity] = useState(4);
+  const [newTableSection, setNewTableSection] = useState<TableSection>('INDOOR');
+  const [newTableStatus, setNewTableStatus] = useState<Table['status']>('AVAILABLE');
+  const [newTableAccessible, setNewTableAccessible] = useState(false);
+
+  const getSectionLabel = (sec: TableSection) => {
+    switch (sec) {
+      case 'WINDOW': return 'Window Seat';
+      case 'INDOOR': return 'Indoor Cozy';
+      case 'OUTDOOR': return 'Garden Patio';
+      case 'AC_SECTION': return 'AC Section';
+      case 'FAMILY': return 'Family Table';
+      case 'COUPLE': return 'Couple Table';
+      case 'VIP_LOUNGE': return 'VIP Lounge';
+      default: return 'Standard Seating';
+    }
+  };
 
   React.useEffect(() => {
     return store.subscribe(() => {
@@ -49,6 +70,41 @@ export default function AdminDashboard() {
 
   const restaurant =
     state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
+
+  // Alerts
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const triggerSuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 4000);
+  };
+
+  const triggerError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(null), 4000);
+  };
+
+  const handleSaveTable = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTableNumber.trim()) {
+      triggerError('Please enter a table number.');
+      return;
+    }
+    const newTable: Table = {
+      id: `table-${Date.now()}`,
+      tableNumber: newTableNumber.trim(),
+      capacity: Number(newTableCapacity),
+      section: newTableSection,
+      sectionName: getSectionLabel(newTableSection),
+      floor: '1st Floor',
+      status: newTableStatus,
+      isAccessible: newTableAccessible,
+    };
+    store.addTable(restaurant.id, newTable);
+    setIsTableModalOpen(false);
+    triggerSuccess(`Table ${newTableNumber} added successfully!`);
+  };
 
   const currentUserRoleObj = state.jobRoles?.find((r) => r.code === state.currentUser?.role);
   const userPermissions = currentUserRoleObj?.permissions || [];
@@ -81,6 +137,18 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6 pb-16">
+      {/* Toast Banners */}
+      {successMsg && (
+        <div className="fixed top-4 right-4 z-50 p-4 rounded-2xl bg-emerald-500 text-white font-bold shadow-xl animate-bounce">
+          {successMsg}
+        </div>
+      )}
+      {errorMsg && (
+        <div className="fixed top-4 right-4 z-50 p-4 rounded-2xl bg-rose-500 text-white font-bold shadow-xl animate-pulse">
+          {errorMsg}
+        </div>
+      )}
+
       {/* Admin Top Banner */}
       <div className="p-6 rounded-3xl bg-zinc-900 text-white border border-zinc-800 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -92,7 +160,7 @@ export default function AdminDashboard() {
           </div>
           <h1 className="text-2xl font-black mt-1">{restaurant.name} Management</h1>
           <p className="text-xs text-zinc-400">
-            Control reservations, floor plan, queue pacing, kitchen tickets, and deposits
+            Control reservations, queue pacing, kitchen tickets, and deposits
           </p>
         </div>
 
@@ -117,7 +185,7 @@ export default function AdminDashboard() {
         {[
           { id: 'OVERVIEW', label: 'Overview Analytics', icon: TrendingUp, show: true },
           { id: 'RESERVATIONS', label: `Reservations (${state.reservations.length})`, icon: Calendar, show: true },
-          { id: 'FLOOR_PLAN', label: 'Visual Floor Plan', icon: Grid, show: true },
+          { id: 'TABLES_DIR', label: `Tables Directory (${restaurant.tables.length})`, icon: Grid, show: true },
           { id: 'TIMELINE', label: 'Table Timeline Matrix', icon: Clock, show: true },
           { id: 'QUEUE', label: `Live Queue (${activeWalkinQueueCount})`, icon: Ticket, show: true },
           { id: 'MENU', label: 'Menu & Offers', icon: ChefHat, show: true },
@@ -335,8 +403,29 @@ export default function AdminDashboard() {
                       <p className="text-[11px] text-zinc-500">{formatTime12h(res.startTime)}</p>
                     </td>
                     <td className="p-3.5">
-                      <span className="font-extrabold text-zinc-900 dark:text-white">{res.tableNumber}</span>
-                      <span className="text-[11px] text-zinc-400 block">{res.guestCount} Guests • {res.tablePreference}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-extrabold text-zinc-900 dark:text-white">Table {res.tableNumber}</span>
+                        {(res.bookingStatus === 'CONFIRMED' || res.bookingStatus === 'CHECKED_IN') && (
+                          <select
+                            value={res.tableId}
+                            onChange={(e) => {
+                              const tbl = restaurant.tables.find(t => t.id === e.target.value);
+                              if (tbl) {
+                                store.assignTableToReservation(res.reservationId, tbl.id, tbl.tableNumber);
+                                triggerSuccess(`Manually seated at Table ${tbl.tableNumber}`);
+                              }
+                            }}
+                            className="text-[9px] font-black py-0.5 px-1 border border-zinc-200 dark:border-zinc-800 rounded bg-zinc-50 dark:bg-zinc-850 text-zinc-800 dark:text-zinc-200 focus:outline-none cursor-pointer"
+                          >
+                            {restaurant.tables.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                Table {t.tableNumber} ({t.capacity}p - {getSectionLabel(t.section)})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-zinc-400 block">{res.guestCount} Guests • {getSectionLabel(res.tablePreference)}</span>
                     </td>
                     <td className="p-3.5">
                       {res.preOrderItems.length > 0 ? (
@@ -397,94 +486,114 @@ export default function AdminDashboard() {
             </table>
           </div>
         </div>
-      )}
-
-      {/* TAB 3: VISUAL FLOOR PLAN */}
-      {adminTab === 'FLOOR_PLAN' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
-              <Grid className="w-5 h-5 text-amber-500" />
-              Interactive 2D Restaurant Floor Plan
-            </h3>
-
-            {/* Status Legend */}
-            <div className="flex items-center gap-3 text-xs font-bold">
-              <span className="flex items-center gap-1 text-emerald-600">
-                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" /> Available
-              </span>
-              <span className="flex items-center gap-1 text-amber-600">
-                <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" /> Occupied / Seated
-              </span>
-              <span className="flex items-center gap-1 text-blue-600">
-                <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" /> Reserved
-              </span>
+      )}      {/* TAB 3: SEATING TABLES DIRECTORY */}
+      {adminTab === 'TABLES_DIR' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="text-base font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
+                <Grid className="w-5 h-5 text-amber-500" />
+                Restaurant Seating Tables Directory
+              </h3>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Manage your physical layout, add tables, view guest occupancy status, and toggle table availability.
+              </p>
             </div>
+
+            <button
+              onClick={() => {
+                setNewTableNumber('');
+                setNewTableCapacity(4);
+                setNewTableSection('INDOOR');
+                setNewTableStatus('AVAILABLE');
+                setNewTableAccessible(false);
+                setIsTableModalOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/10 cursor-pointer self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" /> Add Seating Table
+            </button>
           </div>
 
-          <div className="p-6 rounded-3xl bg-zinc-900 border border-zinc-800 min-h-[400px] relative overflow-hidden shadow-inner">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {restaurant.tables.map((table) => {
-                const currentRes = state.reservations.find(
-                  (r) => r.tableId === table.id && (r.bookingStatus === 'CONFIRMED' || r.bookingStatus === 'SEATED' || r.bookingStatus === 'CHECKED_IN')
-                );
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {restaurant.tables.map((table) => {
+              const currentRes = state.reservations.find(
+                (r) => r.tableId === table.id && (r.bookingStatus === 'CONFIRMED' || r.bookingStatus === 'SEATED' || r.bookingStatus === 'CHECKED_IN')
+              );
 
-                return (
-                  <div
-                    key={table.id}
-                    className={`p-4 rounded-2xl border transition-all ${
-                      table.status === 'AVAILABLE'
-                        ? 'bg-zinc-800/80 border-emerald-500/50 hover:border-emerald-400'
-                        : table.status === 'OCCUPIED'
-                        ? 'bg-amber-950/40 border-amber-500/50'
-                        : 'bg-blue-950/40 border-blue-500/50'
-                    }`}
-                  >
+              return (
+                <div
+                  key={table.id}
+                  className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-3 flex flex-col justify-between hover:shadow-md transition-all relative overflow-hidden text-xs text-zinc-800 dark:text-zinc-200"
+                >
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-lg font-black text-white">{table.tableNumber}</span>
+                      <span className="text-base font-black text-zinc-900 dark:text-white">
+                        Table {table.tableNumber}
+                      </span>
                       <span
-                        className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
+                        className={`text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase ${
                           table.status === 'AVAILABLE'
-                            ? 'bg-emerald-500 text-white'
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                             : table.status === 'OCCUPIED'
-                            ? 'bg-amber-500 text-zinc-950'
-                            : 'bg-blue-500 text-white'
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                            : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
                         }`}
                       >
                         {table.status}
                       </span>
                     </div>
 
-                    <p className="text-xs text-zinc-300 font-bold mt-2">{table.sectionName}</p>
-                    <p className="text-[11px] text-zinc-400">Capacity: {table.capacity} Diners</p>
+                    <div className="text-[11px] space-y-1.5 text-zinc-700 dark:text-zinc-300">
+                      <p className="font-bold text-zinc-850 dark:text-zinc-200">
+                        Section: <span className="text-amber-600 dark:text-amber-400 font-extrabold">{getSectionLabel(table.section)}</span>
+                      </p>
+                      <p className="font-bold text-zinc-850 dark:text-zinc-200">Capacity: <span className="font-extrabold text-zinc-950 dark:text-white">{table.capacity} guests</span></p>
+                      <p className="font-bold text-zinc-850 dark:text-zinc-200">Floor: <span className="text-zinc-500 dark:text-zinc-400 font-extrabold">{table.floor}</span></p>
+                      <p className="flex items-center gap-1 font-bold text-zinc-850 dark:text-zinc-200">
+                        Accessible: <span className="font-extrabold text-zinc-950 dark:text-white">{table.isAccessible ? '♿ Yes' : 'No'}</span>
+                      </p>
+                    </div>
 
                     {currentRes && (
-                      <div className="mt-3 pt-2 border-t border-zinc-700/60 text-[11px] space-y-0.5">
-                        <p className="font-bold text-amber-400">{currentRes.customerName}</p>
-                        <p className="text-zinc-400">{formatTime12h(currentRes.startTime)} ({currentRes.guestCount}p)</p>
+                      <div className="mt-3 pt-2.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] space-y-1">
+                        <span className="text-[9px] uppercase font-bold text-zinc-400 block">Current Occupant:</span>
+                        <p className="font-black text-amber-600 dark:text-amber-400">{currentRes.customerName}</p>
+                        <p className="text-zinc-550 dark:text-zinc-400">
+                          Slot: {formatTime12h(currentRes.startTime)} - {formatTime12h(currentRes.endTime)} ({currentRes.guestCount}p)
+                        </p>
                       </div>
                     )}
-
-                    {/* Quick status toggle button for staff */}
-                    <div className="mt-3 pt-2 border-t border-zinc-700/60 flex items-center justify-between">
-                      <span className="text-[10px] text-zinc-400">Toggle Status:</span>
-                      <button
-                        onClick={() =>
-                          store.updateTableStatus(
-                            restaurant.id,
-                            table.id,
-                            table.status === 'AVAILABLE' ? 'OCCUPIED' : 'AVAILABLE'
-                          )
-                        }
-                        className="px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] font-bold"
-                      >
-                        {table.status === 'AVAILABLE' ? 'Mark Occupied' : 'Mark Available'}
-                      </button>
-                    </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex gap-2">
+                    <button
+                      onClick={() =>
+                        store.updateTableStatus(
+                          restaurant.id,
+                          table.id,
+                          table.status === 'AVAILABLE' ? 'OCCUPIED' : 'AVAILABLE'
+                        )
+                      }
+                      className="flex-1 py-1.5 rounded-xl bg-zinc-105 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-zinc-850 dark:text-zinc-200 font-bold text-[10px] cursor-pointer transition-colors"
+                    >
+                      {table.status === 'AVAILABLE' ? 'Seize Table' : 'Free Table'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Are you sure you want to delete Table ${table.tableNumber}?`)) {
+                          store.deleteTable(restaurant.id, table.id);
+                          triggerSuccess(`Table ${table.tableNumber} deleted.`);
+                        }
+                      }}
+                      className="px-2 py-1.5 rounded-xl border border-rose-100 dark:border-rose-900/30 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[10px] cursor-pointer transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -590,12 +699,27 @@ export default function AdminDashboard() {
 
                 <div className="flex items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                   {token.status === 'WAITING' && (
-                    <button
-                      onClick={() => store.callQueueToken(token.tokenId, 'T-1')}
-                      className="flex-1 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold hover:bg-amber-600"
-                    >
-                      Call Token
-                    </button>
+                    <div className="flex-1 space-y-1">
+                      <span className="text-[9px] font-bold text-zinc-400 block">Seating Assignment (Call Guest):</span>
+                      <select
+                        onChange={(e) => {
+                          const tbl = restaurant.tables.find(t => t.id === e.target.value);
+                          if (tbl) {
+                            store.callQueueToken(token.tokenId, tbl.id);
+                            triggerSuccess(`Called Token ${token.tokenId} to Table ${tbl.tableNumber}`);
+                          }
+                        }}
+                        defaultValue=""
+                        className="w-full text-xs font-bold py-1.5 px-2 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-855 text-zinc-850 dark:text-zinc-200 focus:outline-none cursor-pointer"
+                      >
+                        <option value="" disabled>-- Select Table --</option>
+                        {restaurant.tables.filter(t => t.status === 'AVAILABLE').map((t) => (
+                          <option key={t.id} value={t.id}>
+                            Table {t.tableNumber} ({t.capacity}p - {getSectionLabel(t.section)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                   {token.status === 'CALLING' && (
                     <button
@@ -717,6 +841,111 @@ export default function AdminDashboard() {
       {/* TAB 7: STAFF & ROLES MANAGEMENT */}
       {adminTab === 'STAFF' && canManageStaff && (
         <StaffManagementView state={state} />
+      )}
+      {/* ADD TABLE MODAL */}
+      {isTableModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-3xl shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200 text-xs text-zinc-855 dark:text-zinc-200">
+            <div className="flex justify-between items-center pb-1 border-b border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-base font-black text-zinc-900 dark:text-white">
+                Add New Seating Table
+              </h3>
+              <button
+                onClick={() => setIsTableModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-850 text-zinc-400 cursor-pointer"
+              >
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTable} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Table Number</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. T-15"
+                    value={newTableNumber}
+                    onChange={(e) => setNewTableNumber(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold animate-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Seating Capacity</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={20}
+                    value={newTableCapacity}
+                    onChange={(e) => setNewTableCapacity(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Ambience Section</label>
+                  <select
+                    value={newTableSection}
+                    onChange={(e) => setNewTableSection(e.target.value as TableSection)}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold cursor-pointer"
+                  >
+                    <option value="WINDOW">Window Seat</option>
+                    <option value="INDOOR">Indoor Cozy</option>
+                    <option value="OUTDOOR">Garden Patio</option>
+                    <option value="AC_SECTION">AC Section</option>
+                    <option value="FAMILY">Family Table</option>
+                    <option value="COUPLE">Couple Table</option>
+                    <option value="VIP_LOUNGE">VIP Lounge</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Initial Status</label>
+                  <select
+                    value={newTableStatus}
+                    onChange={(e) => setNewTableStatus(e.target.value as Table['status'])}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold cursor-pointer"
+                  >
+                    <option value="AVAILABLE">Available</option>
+                    <option value="OCCUPIED">Occupied / Seated</option>
+                    <option value="RESERVED">Reserved</option>
+                  </select>
+                </div>
+
+                <div className="col-span-2 py-1">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-zinc-750 dark:text-zinc-350">
+                    <input
+                      type="checkbox"
+                      checked={newTableAccessible}
+                      onChange={(e) => setNewTableAccessible(e.target.checked)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>♿ Wheelchair Accessible Table</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsTableModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-850 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all cursor-pointer"
+                >
+                  Save Table
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1333,7 +1562,7 @@ function StaffManagementView({ state }: { state: AppState }) {
 
                   <div className="space-y-1.5 bg-zinc-50 dark:bg-zinc-955 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800">
                     {[
-                      { id: 'DASHBOARD', label: 'Admin Dashboard Panel Access', desc: 'Allows viewing reservation timelines, floor plans, settings, and occupancy.' },
+                      { id: 'DASHBOARD', label: 'Admin Dashboard Panel Access', desc: 'Allows viewing reservation timelines, settings, and occupancy.' },
                       { id: 'KITCHEN', label: 'Kitchen KDS Display Access', desc: 'Allows viewing and updating cooking ticket timers.' },
                       { id: 'SCANNER', label: 'Staff QR Scanner Access', desc: 'Allows door ticket checking and scanning check-ins.' },
                       { id: 'STAFF_MANAGEMENT', label: 'Staff & Job Role Administration', desc: 'Full privileges to add/edit/remove staff and custom roles.' },
@@ -1605,6 +1834,8 @@ function MenuOffersView({ state }: { state: AppState }) {
       }
     }
   };
+
+
 
 
   const handleSaveItem = (e: React.FormEvent) => {

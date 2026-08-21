@@ -10,7 +10,7 @@ import QRBookingPassModal from '@/components/customer/QRBookingPassModal';
 import { ModifyBookingModal, CancelBookingModal } from '@/components/customer/ModifyCancelModal';
 import LiveQueueModal from '@/components/customer/LiveQueueModal';
 import WaitlistModal from '@/components/customer/WaitlistModal';
-import AIAssistantModal from '@/components/ai/AIAssistantModal';
+
 import KitchenKDS from '@/components/kitchen/KitchenKDS';
 import StaffQRScanner from '@/components/scanner/StaffQRScanner';
 import { store, AppState } from '@/lib/store';
@@ -528,7 +528,7 @@ export default function AdminPage() {
         onClose={() => store.setActiveWaitlistModal(false)}
       />
 
-      <AIAssistantModal />
+
 
       <Footer />
     </div>

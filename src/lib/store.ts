@@ -1086,6 +1086,49 @@ class StateStore {
     this.notify();
   }
 
+  public addTable(restaurantId: string, table: Table) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          tables: [...rest.tables, table],
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
+  public assignTableToReservation(reservationId: string, tableId: string, tableNumber: string) {
+    const updatedReservations = this.state.reservations.map((res) => {
+      if (res.reservationId === reservationId) {
+        return {
+          ...res,
+          tableId,
+          tableNumber,
+        };
+      }
+      return res;
+    });
+    this.state = { ...this.state, reservations: updatedReservations };
+    this.notify();
+  }
+
+  public deleteTable(restaurantId: string, tableId: string) {
+    const updatedRestaurants = this.state.restaurants.map((rest) => {
+      if (rest.id === restaurantId) {
+        return {
+          ...rest,
+          tables: rest.tables.filter((t) => t.id !== tableId),
+        };
+      }
+      return rest;
+    });
+    this.state = { ...this.state, restaurants: updatedRestaurants };
+    this.notify();
+  }
+
   // --- Admin Menu & Offers/Schemes Modifiers ---
   public addDailySpecial(restaurantId: string, special: DailySpecial) {
     const updatedRestaurants = this.state.restaurants.map((rest) => {

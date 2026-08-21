@@ -20,7 +20,7 @@ export default function Footer() {
               </span>
             </div>
             <p className="text-xs text-zinc-500 max-w-sm leading-relaxed">
-              AI Smart Queue, Pre-Booking & Pre-Ordering System for modern restaurants, cafes, and food courts. Skip the wait, guarantee your table, and savor your meal faster.
+              Smart Queue, Pre-Booking & Pre-Ordering System for modern restaurants, cafes, and food courts. Skip the wait, guarantee your table, and savor your meal faster.
             </p>
           </div>
 
@@ -30,7 +30,7 @@ export default function Footer() {
               Features
             </p>
             <ul className="space-y-1.5 text-zinc-500">
-              <li>AI Smart Table Allocation</li>
+              <li>Smart Table Allocation</li>
               <li>Food Pre-Ordering & Kitchen KDS</li>
               <li>Digital QR Booking Pass</li>
               <li>Live Walk-In Queue & Tokens</li>

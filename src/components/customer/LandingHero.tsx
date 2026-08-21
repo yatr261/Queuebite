@@ -29,7 +29,7 @@ export default function LandingHero({
 }) {
   const steps = [
     { title: '1. Select Table', desc: 'Choose Date, Time & Preferences', icon: Sparkles },
-    { title: '2. AI Smart Match', desc: 'Instant conflict-free allocation', icon: ShieldCheck },
+    { title: '2. Smart Match', desc: 'Instant conflict-free allocation', icon: ShieldCheck },
     { title: '3. Pre-Order Meal', desc: 'Save 10% on food cart', icon: UtensilsCrossed },
     { title: '4. Kitchen Prep', desc: 'Timed cooking before arrival', icon: ChefHat },
     { title: '5. Smart Check-In', desc: '1-tap QR scan at entrance', icon: QrCode },
@@ -81,13 +81,6 @@ export default function LandingHero({
               Join Live Queue
             </button>
 
-            <button
-              onClick={() => store.setAiChatOpen(true)}
-              className="px-5 py-3.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold text-sm border border-amber-500/30 transition-all flex items-center gap-2"
-            >
-              <Zap className="w-4 h-4 text-amber-400" />
-              Ask AI Assistant
-            </button>
           </div>
 
           {/* Key Metric Badges */}

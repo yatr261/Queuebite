@@ -211,7 +211,7 @@ export default function BookingWizardModal({
                 Reserve Table • {restaurant.name}
               </h2>
               <p className="text-[11px] text-zinc-500">
-                Step {currentStep} of 6 • AI Conflict-Free Booking
+                Step {currentStep} of 6 • Conflict-Free Booking
               </p>
             </div>
           </div>
@@ -490,10 +490,10 @@ export default function BookingWizardModal({
               <div className="space-y-1">
                 <h3 className="text-base font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-amber-500" />
-                  Table Preference & AI Allocation
+                  Table Preference & Seating Allocation
                 </h3>
                 <p className="text-xs text-zinc-500">
-                  Choose your preferred ambience. AI will intelligently match the best available table.
+                  Choose your preferred ambience. We will match the best available table.
                 </p>
               </div>
 
@@ -542,7 +542,7 @@ export default function BookingWizardModal({
                     </div>
                     <div className="space-y-1">
                       <h4 className="text-xs font-extrabold text-zinc-900 dark:text-white">
-                        AI Table Allocation Engine
+                        Smart Table Allocation Engine
                       </h4>
                       <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
                         {allocation.aiExplanation}

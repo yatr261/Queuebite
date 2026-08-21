@@ -1,4 +1,7 @@
 - [x] Make mock data dates dynamic in `src/lib/mockData.ts`
 - [x] Fix homepage redirection logic in `src/app/page.tsx`
 - [x] Implement staff session header and fix redirection in `src/app/admin/page.tsx`
-- [x] Run build and verify correctness
+- [x] Fix missing `addTable`, `assignTableToReservation`, and `deleteTable` in `src/lib/store.ts`
+- [x] Remove deprecated `AIAssistantModal` from `src/app/admin/page.tsx`
+- [x] Remove visual seating sections showcase from `src/components/customer/RestaurantDetail.tsx` and "floor plan" description references from `src/components/admin/AdminDashboard.tsx`
+- [x] Run build and verify correctness (Next.js compilation successful)

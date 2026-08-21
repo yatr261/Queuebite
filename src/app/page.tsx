@@ -11,7 +11,7 @@ import { ModifyBookingModal, CancelBookingModal } from '@/components/customer/Mo
 import LiveQueueModal from '@/components/customer/LiveQueueModal';
 import WaitlistModal from '@/components/customer/WaitlistModal';
 import MyBookingsView from '@/components/customer/MyBookingsView';
-import AIAssistantModal from '@/components/ai/AIAssistantModal';
+
 import { store, AppState } from '@/lib/store';
 import { useRouter } from 'next/navigation';
 
@@ -118,7 +118,7 @@ export default function Home() {
         onClose={() => store.setActiveWaitlistModal(false)}
       />
 
-      <AIAssistantModal />
+
 
       {/* Footer */}
       <Footer />

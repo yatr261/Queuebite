@@ -26,21 +26,124 @@ export default function MyBookingsView({
   const [state, setState] = React.useState<AppState>(store.getState());
   const [activeTab, setActiveTab] = useState<'UPCOMING' | 'COMPLETED' | 'CANCELLED' | 'QUEUE'>('UPCOMING');
 
+  const [sessionPhone, setSessionPhone] = useState<string>('');
+  const [tempPhoneInput, setTempPhoneInput] = useState<string>('');
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedPhone = localStorage.getItem('qb_session_phone');
+      if (savedPhone) {
+        setSessionPhone(savedPhone);
+        setTempPhoneInput(savedPhone);
+        setIsLoggedIn(true);
+      }
+    }
+  }, []);
+
   React.useEffect(() => {
     return store.subscribe(() => {
       setState({ ...store.getState() });
     });
   }, []);
 
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tempPhoneInput.trim()) return;
+    localStorage.setItem('qb_session_phone', tempPhoneInput.trim());
+    setSessionPhone(tempPhoneInput.trim());
+    setIsLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('qb_session_phone');
+    setSessionPhone('');
+    setTempPhoneInput('');
+    setIsLoggedIn(false);
+  };
+
+  const cleanPhone = (p: string) => p.replace(/\s+/g, '').replace(/[^0-9]/g, '');
+
   const upcomingReservations = state.reservations.filter(
-    (r) => r.bookingStatus === 'CONFIRMED' || r.bookingStatus === 'CHECKED_IN' || r.bookingStatus === 'SEATED'
+    (r) => {
+      const matchPhone = isLoggedIn ? cleanPhone(r.customerPhone) === cleanPhone(sessionPhone) : false;
+      return matchPhone && (r.bookingStatus === 'CONFIRMED' || r.bookingStatus === 'CHECKED_IN' || r.bookingStatus === 'SEATED');
+    }
   );
-  const completedReservations = state.reservations.filter((r) => r.bookingStatus === 'COMPLETED');
-  const cancelledReservations = state.reservations.filter((r) => r.bookingStatus === 'CANCELLED' || r.bookingStatus === 'NO_SHOW');
-  const activeQueueTokens = state.queueTokens;
+
+  const completedReservations = state.reservations.filter(
+    (r) => {
+      const matchPhone = isLoggedIn ? cleanPhone(r.customerPhone) === cleanPhone(sessionPhone) : false;
+      return matchPhone && r.bookingStatus === 'COMPLETED';
+    }
+  );
+
+  const cancelledReservations = state.reservations.filter(
+    (r) => {
+      const matchPhone = isLoggedIn ? cleanPhone(r.customerPhone) === cleanPhone(sessionPhone) : false;
+      return matchPhone && (r.bookingStatus === 'CANCELLED' || r.bookingStatus === 'NO_SHOW');
+    }
+  );
+
+  const activeQueueTokens = state.queueTokens.filter(
+    (q) => {
+      return isLoggedIn ? cleanPhone(q.customerPhone) === cleanPhone(sessionPhone) : false;
+    }
+  );
+
+  if (!isLoggedIn) {
+    return (
+      <div className="max-w-md mx-auto my-12 p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xl space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-xl">
+            🔑
+          </div>
+          <h3 className="text-lg font-black text-zinc-900 dark:text-white">Retrieve Passes & Bookings</h3>
+          <p className="text-xs text-zinc-500 max-w-xs mx-auto">
+            Forget to take a screenshot or download your queue token/reservation pass? Log in with your phone number to get it.
+          </p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4 text-xs font-bold">
+          <div className="space-y-1">
+            <label className="font-bold text-zinc-400 uppercase tracking-widest pl-1">Phone Number</label>
+            <input
+              type="tel"
+              required
+              placeholder="e.g. +91 99887 76655"
+              value={tempPhoneInput}
+              onChange={(e) => setTempPhoneInput(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-zinc-50 dark:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-800 dark:text-zinc-100 font-bold"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all shadow-md shadow-amber-500/10 cursor-pointer"
+          >
+            Find Active Passes
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-16">
+      {/* Session Active Banner */}
+      <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-bold text-amber-700 dark:text-amber-400">
+        <span className="flex items-center gap-1.5">
+          <CheckCircle2 className="w-4 h-4 text-amber-500 animate-pulse" />
+          Active Seating Session: {sessionPhone} (Retrieved bookings across all devices)
+        </span>
+        <button
+          onClick={handleLogout}
+          className="px-2.5 py-1.5 rounded-xl bg-amber-500 text-zinc-950 text-[10px] font-black hover:bg-amber-600 self-start sm:self-auto transition-colors cursor-pointer"
+        >
+          Sign Out
+        </button>
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-black text-zinc-900 dark:text-white flex items-center gap-2">

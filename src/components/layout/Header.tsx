@@ -80,7 +80,7 @@ export default function Header({
                   QUEUEBITE
                 </span>
                 <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                  AI Pre-Book
+                  Smart Pre-Book
                 </span>
               </div>
               <p className="text-[10px] text-zinc-500 dark:text-zinc-400 hidden sm:block">
@@ -137,16 +137,6 @@ export default function Header({
 
           {/* Right Action Cluster */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* AI Assistant Button */}
-            <button
-              onClick={() => store.setAiChatOpen(!state.isAiChatOpen)}
-              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-500/20 hover:from-amber-600 hover:to-orange-600 transition-all active:scale-95"
-            >
-              <Bot className="w-3.5 h-3.5 animate-bounce" />
-              <span className="hidden sm:inline">AI Assistant</span>
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-300 animate-ping" />
-            </button>
-
             {/* Notifications Dropdown */}
             <div className="relative">
               <button

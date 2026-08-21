@@ -11,7 +11,6 @@ import {
   Phone,
   Star,
   Users,
-  ShieldCheck,
   Percent,
   Flame,
   Leaf,
@@ -257,43 +256,7 @@ export default function RestaurantDetail({
         </div>
       )}
 
-      {/* Table Sections Showcase */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
-          <ShieldCheck className="w-5 h-5 text-amber-500" />
-          Seating Sections & Capacities
-        </h3>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {restaurant.tables.map((t) => (
-            <div
-              key={t.id}
-              className="p-3.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-1.5"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-amber-600 dark:text-amber-400">
-                  {t.tableNumber}
-                </span>
-                <span
-                  className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                    t.status === 'AVAILABLE'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                      : t.status === 'OCCUPIED'
-                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  {t.status}
-                </span>
-              </div>
-              <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-                {t.sectionName}
-              </p>
-              <p className="text-[11px] text-zinc-500">Max {t.capacity} Guests • {t.floor}</p>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* Menu & Pre-Ordering Preview */}
       <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
