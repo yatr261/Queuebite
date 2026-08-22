@@ -344,6 +344,14 @@ export default function MyBookingsView({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => store.setSelectedBookingForQR(token)}
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold shadow flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    QR Pass
+                  </button>
+
                   {token.status === 'CALLING' && (
                     <span className="px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-black animate-pulse">
                       🔔 Proceed to Table {token.assignedTableNumber || 'T-1'}

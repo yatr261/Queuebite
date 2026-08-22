@@ -53,7 +53,7 @@ export interface AppState {
   activeQueueModal: boolean;
   activeScannerModal: boolean;
   activeCheckInBookingId: string | null;
-  selectedBookingForQR: Reservation | null;
+  selectedBookingForQR: Reservation | QueueToken | null;
   selectedBookingForModify: Reservation | null;
   selectedBookingForCancel: Reservation | null;
   activeWaitlistModal: boolean;
@@ -370,7 +370,7 @@ class StateStore {
     this.notify();
   }
 
-  public setSelectedBookingForQR(res: Reservation | null) {
+  public setSelectedBookingForQR(res: Reservation | QueueToken | null) {
     this.state = { ...this.state, selectedBookingForQR: res };
     this.notify();
   }

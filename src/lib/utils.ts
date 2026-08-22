@@ -192,3 +192,202 @@ export function playNotificationChime(type: 'success' | 'alert' | 'kitchen' = 's
     // AudioContext autoplay restrictions
   }
 }
+
+// Convert SVG element to PNG data URL (client-side only)
+export async function svgToPngDataUrl(svgElement: SVGElement): Promise<string> {
+  if (typeof window === 'undefined') {
+    throw new Error('svgToPngDataUrl must be run in browser');
+  }
+  const svgString = new XMLSerializer().serializeToString(svgElement);
+  const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const URL = window.URL || window.webkitURL || window;
+  const blobURL = URL.createObjectURL(svgBlob);
+  
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 500;
+      canvas.height = 500;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.fillStyle = '#FFFFFF';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const png = canvas.toDataURL('image/png');
+        URL.revokeObjectURL(blobURL);
+        resolve(png);
+      } else {
+        URL.revokeObjectURL(blobURL);
+        reject(new Error('Failed to get canvas 2D context'));
+      }
+    };
+    image.onerror = (e) => {
+      URL.revokeObjectURL(blobURL);
+      reject(e);
+    };
+    image.src = blobURL;
+  });
+}
+
+// Download a data URL as a file
+export function downloadDataUrl(dataUrl: string, filename: string): void {
+  if (typeof window === 'undefined') return;
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Generate and download PDF pass ticket (client-side only)
+export async function downloadPdfPass(
+  booking: any, // Reservation or QueueToken
+  restaurantName: string,
+  address: string,
+  qrPngDataUrl: string
+): Promise<void> {
+  if (typeof window === 'undefined') return;
+  
+  const { jsPDF } = await import('jspdf');
+  
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a6', // 105 x 148 mm
+  });
+
+  // Background and border
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, 105, 148, 'F');
+  
+  // Outer elegant border
+  doc.setDrawColor(228, 228, 231); // border-zinc-200
+  doc.setLineWidth(1);
+  doc.rect(4, 4, 97, 140);
+
+  // Top header banner (Amber background)
+  doc.setFillColor(245, 158, 11); // bg-amber-500
+  doc.rect(4, 4, 97, 18, 'F');
+
+  // Header Title
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('QUEUEBITE DIGITAL PASS', 52.5, 11, { align: 'center' });
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Present this pass at the entrance', 52.5, 16, { align: 'center' });
+
+  // Main Content styling
+  doc.setTextColor(24, 24, 27); // text-zinc-900
+
+  // Check if it's a reservation or queue token
+  const isReservation = 'reservationId' in booking;
+  const passId = isReservation ? booking.reservationId : booking.tokenId;
+  const passTypeLabel = isReservation ? 'RESERVATION PASS' : 'LIVE QUEUE TOKEN';
+
+  // Pass type title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(113, 113, 122); // text-zinc-500
+  doc.text(passTypeLabel, 10, 31);
+
+  // Pass ID
+  doc.setFontSize(16);
+  doc.setTextColor(245, 158, 11); // text-amber-500
+  doc.text(passId, 10, 38);
+
+  // Restaurant Name
+  doc.setFontSize(11);
+  doc.setTextColor(24, 24, 27); // text-zinc-900
+  doc.text(restaurantName, 10, 46);
+
+  // Draw separator line
+  doc.setDrawColor(228, 228, 231);
+  doc.setLineWidth(0.3);
+  doc.line(10, 50, 95, 50);
+
+  // Details
+  doc.setFontSize(8);
+  doc.setTextColor(113, 113, 122);
+  doc.text('GUEST NAME:', 10, 56);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(24, 24, 27);
+  doc.text(booking.customerName, 38, 56);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(113, 113, 122);
+  doc.text('PARTY SIZE:', 10, 62);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(24, 24, 27);
+  doc.text(`${booking.guestCount} Guests`, 38, 62);
+
+  if (isReservation) {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(113, 113, 122);
+    doc.text('DATE & SLOT:', 10, 68);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(24, 24, 27);
+    doc.text(`${formatDate(booking.date)} at ${formatTime12h(booking.startTime)}`, 38, 68);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(113, 113, 122);
+    doc.text('ASSIGNED TABLE:', 10, 74);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(24, 24, 27);
+    doc.text(`Table ${booking.tableNumber} (${booking.tablePreference})`, 38, 74);
+  } else {
+    // Walk-in queue details
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(113, 113, 122);
+    doc.text('JOINED AT:', 10, 68);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(24, 24, 27);
+    
+    // Parse joinedAt time
+    let joinedTime = 'Just now';
+    if (booking.joinedAt) {
+      try {
+        joinedTime = new Date(booking.joinedAt).toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+      } catch {
+        joinedTime = booking.joinedAt;
+      }
+    }
+    doc.text(joinedTime, 38, 68);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(113, 113, 122);
+    doc.text('EST. WAIT TIME:', 10, 74);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(245, 158, 11);
+    doc.text(`~${booking.estimatedWaitMinutes} mins`, 38, 74);
+  }
+
+  // Draw separator line above QR code
+  doc.setDrawColor(228, 228, 231);
+  doc.line(10, 79, 95, 79);
+
+  // Embed QR Code
+  doc.addImage(qrPngDataUrl, 'PNG', 32.5, 83, 40, 40);
+
+  // Bottom Footer styling
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(82, 82, 91); // text-zinc-600
+  doc.text(address, 52.5, 131, { align: 'center', maxWidth: 85 });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(161, 161, 170); // text-zinc-400
+  doc.text('Powered by Queuebite Smart Restaurant Solutions', 52.5, 140, { align: 'center' });
+
+  // Save the document
+  doc.save(`queuebite-pass-${passId}.pdf`);
+}
+
