@@ -39,6 +39,7 @@ export default function StaffQRScanner() {
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const isProcessingRef = useRef<boolean>(false);
   const isCameraRunningRef = useRef<boolean>(false);
+  const isInitializingRef = useRef<boolean>(false);
 
   const readerDivId = 'queuebite-qr-reader';
 
@@ -105,9 +106,12 @@ export default function StaffQRScanner() {
     if (html5QrCodeRef.current && isCameraRunningRef.current) {
       try {
         html5QrCodeRef.current.stop().catch(() => {});
-        isCameraRunningRef.current = false;
+        html5QrCodeRef.current.clear();
       } catch {
         // ignore stop errors
+      } finally {
+        isCameraRunningRef.current = false;
+        html5QrCodeRef.current = null;
       }
     }
     setIsScanningActive(false);
@@ -200,23 +204,34 @@ export default function StaffQRScanner() {
   // Start Real Camera Scanner via html5-qrcode
   const startCameraScanner = useCallback(async () => {
     if (typeof window === 'undefined') return;
+    if (isInitializingRef.current) return;
+    isInitializingRef.current = true;
 
     setCameraError(null);
 
     const element = document.getElementById(readerDivId);
-    if (!element) return;
+    if (!element) {
+      isInitializingRef.current = false;
+      return;
+    }
 
     try {
       const { Html5Qrcode: QrScannerClass } = await import('html5-qrcode');
 
-      if (html5QrCodeRef.current && isCameraRunningRef.current) {
+      if (html5QrCodeRef.current) {
         try {
-          await html5QrCodeRef.current.stop();
-          isCameraRunningRef.current = false;
+          if (isCameraRunningRef.current) {
+            await html5QrCodeRef.current.stop();
+          }
+          html5QrCodeRef.current.clear();
         } catch {
           // ignore stop errors
         }
+        html5QrCodeRef.current = null;
       }
+
+      // Purge any stale video or canvas DOM elements inside container
+      element.innerHTML = '';
 
       const html5QrCode = new QrScannerClass(readerDivId);
       html5QrCodeRef.current = html5QrCode;
@@ -229,7 +244,7 @@ export default function StaffQRScanner() {
         cameraConfig,
         {
           fps: 10,
-          qrbox: { width: 250, height: 250 },
+          qrbox: { width: 220, height: 220 },
         },
         (decodedText) => {
           // Continuous real-time detection: Stop camera stream immediately and process payload
@@ -245,18 +260,28 @@ export default function StaffQRScanner() {
       setCameraError(
         'Camera access is required to scan customer QR codes. Please ensure camera permissions are granted or enter the Booking ID manually.'
       );
+    } finally {
+      isInitializingRef.current = false;
     }
   }, [selectedCameraId, verifyAndCheckInBooking]);
 
   // Stop Camera Scanner helper
   const stopCameraScanner = useCallback(async () => {
-    if (html5QrCodeRef.current && isCameraRunningRef.current) {
+    if (html5QrCodeRef.current) {
       try {
-        await html5QrCodeRef.current.stop();
+        if (isCameraRunningRef.current) {
+          await html5QrCodeRef.current.stop();
+        }
+        html5QrCodeRef.current.clear();
       } catch {
         // ignore stop errors
       } finally {
         isCameraRunningRef.current = false;
+        html5QrCodeRef.current = null;
+        const element = typeof document !== 'undefined' ? document.getElementById(readerDivId) : null;
+        if (element) {
+          element.innerHTML = '';
+        }
       }
     }
   }, []);
@@ -294,6 +319,42 @@ export default function StaffQRScanner() {
 
   return (
     <div className="space-y-6 pb-16 max-w-3xl mx-auto">
+      {/* Scoped CSS Rules for html5-qrcode to guarantee EXACTLY ONE clean video element */}
+      <style>{`
+        #queuebite-qr-reader {
+          width: 100% !important;
+          height: 100% !important;
+          position: relative !important;
+          overflow: hidden !important;
+          border: none !important;
+          background: #000000 !important;
+        }
+        #queuebite-qr-reader video {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+          display: block !important;
+          border-radius: 1.5rem !important;
+        }
+        #queuebite-qr-reader canvas {
+          display: none !important;
+        }
+        #queuebite-qr-reader img {
+          display: none !important;
+        }
+        #queuebite-qr-reader #qr-shaded-region {
+          display: none !important;
+        }
+        #queuebite-qr-reader__scan_region {
+          width: 100% !important;
+          height: 100% !important;
+          background: transparent !important;
+        }
+        #queuebite-qr-reader__dashboard {
+          display: none !important;
+        }
+      `}</style>
+
       {/* Scanner Header Banner */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-zinc-900 via-zinc-950 to-purple-950 text-white border border-zinc-800 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
@@ -353,14 +414,14 @@ export default function StaffQRScanner() {
           )}
 
           {/* Camera Viewfinder & Scanner Frame */}
-          <div className="relative w-full max-w-sm mx-auto min-h-[300px] rounded-3xl overflow-hidden bg-black border-2 border-purple-500/50 shadow-inner flex items-center justify-center">
+          <div className="relative w-full max-w-sm aspect-square mx-auto rounded-3xl overflow-hidden bg-black border-2 border-purple-500/50 shadow-inner flex items-center justify-center">
             {/* HTML5 QR Code Video Stream Container */}
             <div id={readerDivId} className="w-full h-full text-white" />
 
             {/* Custom Overlay Scanner Target Reticle */}
             {!cameraError && (
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
-                <div className="w-60 h-60 border-2 border-purple-400 rounded-2xl relative shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+                <div className="w-56 h-56 border-2 border-purple-400 rounded-2xl relative shadow-[0_0_20px_rgba(168,85,247,0.3)]">
                   {/* Corners accent */}
                   <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-amber-400 rounded-tl-lg" />
                   <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-amber-400 rounded-tr-lg" />
