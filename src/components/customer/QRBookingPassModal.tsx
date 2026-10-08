@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { store } from '@/lib/store';
 import { Reservation } from '@/lib/types';
 import { formatDate, formatTime12h, formatCurrency, generateIcsFile } from '@/lib/utils';
@@ -28,6 +29,26 @@ export default function QRBookingPassModal({
   booking: Reservation | null;
   onClose: () => void;
 }) {
+  const [qrImageUrl, setQrImageUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (booking?.qrCodeData) {
+      QRCode.toDataURL(booking.qrCodeData, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+        errorCorrectionLevel: 'M',
+      })
+        .then((url) => setQrImageUrl(url))
+        .catch((err) => {
+          console.error('Failed to generate QR code image:', err);
+        });
+    }
+  }, [booking?.qrCodeData]);
+
   if (!booking) return null;
 
   const statusColors = {
@@ -108,47 +129,20 @@ export default function QRBookingPassModal({
 
           {/* QR Code Container */}
           <div className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-center space-y-3">
-            {/* SVG Simulated QR code */}
-            <div className="w-44 h-44 mx-auto bg-white p-3 rounded-2xl shadow-md border border-zinc-200 flex flex-col items-center justify-center">
-              <svg viewBox="0 0 100 100" className="w-full h-full text-zinc-900">
-                <rect width="100" height="100" fill="white" />
-                {/* Corner markers */}
-                <rect x="5" y="5" width="30" height="30" fill="black" />
-                <rect x="9" y="9" width="22" height="22" fill="white" />
-                <rect x="13" y="13" width="14" height="14" fill="black" />
-
-                <rect x="65" y="5" width="30" height="30" fill="black" />
-                <rect x="69" y="9" width="22" height="22" fill="white" />
-                <rect x="73" y="13" width="14" height="14" fill="black" />
-
-                <rect x="5" y="65" width="30" height="30" fill="black" />
-                <rect x="9" y="69" width="22" height="22" fill="white" />
-                <rect x="13" y="73" width="14" height="14" fill="black" />
-
-                {/* Random QR pixels for unique pattern */}
-                <rect x="42" y="10" width="6" height="6" fill="black" />
-                <rect x="52" y="10" width="6" height="6" fill="black" />
-                <rect x="42" y="24" width="8" height="8" fill="black" />
-                <rect x="54" y="24" width="6" height="6" fill="black" />
-
-                <rect x="10" y="42" width="8" height="8" fill="black" />
-                <rect x="22" y="42" width="6" height="6" fill="black" />
-                <rect x="10" y="54" width="6" height="6" fill="black" />
-                <rect x="22" y="54" width="8" height="8" fill="black" />
-
-                <rect x="42" y="42" width="16" height="16" fill="black" />
-                <rect x="46" y="46" width="8" height="8" fill="white" />
-                <rect x="65" y="45" width="10" height="6" fill="black" />
-                <rect x="80" y="45" width="12" height="8" fill="black" />
-                <rect x="65" y="58" width="8" height="8" fill="black" />
-                <rect x="78" y="58" width="14" height="6" fill="black" />
-
-                <rect x="42" y="65" width="12" height="6" fill="black" />
-                <rect x="58" y="65" width="6" height="8" fill="black" />
-                <rect x="42" y="78" width="6" height="14" fill="black" />
-                <rect x="54" y="78" width="14" height="8" fill="black" />
-                <rect x="75" y="75" width="16" height="16" fill="black" />
-              </svg>
+            {/* Real Specification-Compliant QR Code Image */}
+            <div className="w-44 h-44 mx-auto bg-white p-2.5 rounded-2xl shadow-md border border-zinc-200 flex items-center justify-center overflow-hidden">
+              {qrImageUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={qrImageUrl}
+                  alt={`QueueBite QR Pass for ${booking.reservationId}`}
+                  className="w-full h-full object-contain rounded-xl"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-zinc-400">
+                  <QrCode className="w-8 h-8 animate-spin text-amber-500" />
+                </div>
+              )}
             </div>
 
             <div>
