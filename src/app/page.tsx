@@ -12,20 +12,10 @@ import LiveQueueModal from '@/components/customer/LiveQueueModal';
 import WaitlistModal from '@/components/customer/WaitlistModal';
 import MyBookingsView from '@/components/customer/MyBookingsView';
 import AdminDashboard from '@/components/admin/AdminDashboard';
-import dynamic from 'next/dynamic';
 import KitchenKDS from '@/components/kitchen/KitchenKDS';
+import StaffQRScanner from '@/components/scanner/StaffQRScanner';
 import AIAssistantModal from '@/components/ai/AIAssistantModal';
 import { store, AppState } from '@/lib/store';
-
-const StaffQRScanner = dynamic(() => import('@/components/scanner/StaffQRScanner'), {
-  ssr: false,
-  loading: () => (
-    <div className="p-8 rounded-3xl bg-zinc-950 text-white text-center space-y-3 my-8 max-w-3xl mx-auto border border-zinc-800 shadow-xl">
-      <div className="w-8 h-8 mx-auto border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-      <p className="text-xs font-semibold text-zinc-400">Loading Staff Entrance Scanner...</p>
-    </div>
-  ),
-});
 
 export default function Home() {
   const [state, setState] = useState<AppState>(store.getState());
