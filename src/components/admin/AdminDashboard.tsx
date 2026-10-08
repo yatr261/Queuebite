@@ -113,7 +113,7 @@ export default function AdminDashboard() {
           return (
             <button
               key={tab.id}
-              onClick={() => setAdminTab(tab.id as any)}
+              onClick={() => setAdminTab(tab.id as 'OVERVIEW' | 'RESERVATIONS' | 'FLOOR_PLAN' | 'TIMELINE' | 'QUEUE' | 'SETTINGS')}
               className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 isSelected
                   ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
@@ -134,7 +134,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-zinc-500">Today's Bookings</span>
+                <span className="text-xs font-bold text-zinc-500">Today&apos;s Bookings</span>
                 <Calendar className="w-4 h-4 text-amber-500" />
               </div>
               <p className="text-2xl font-black text-zinc-900 dark:text-white">

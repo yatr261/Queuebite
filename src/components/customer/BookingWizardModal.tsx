@@ -61,7 +61,6 @@ export default function BookingWizardModal({
   const [customerEmail, setCustomerEmail] = useState<string>('rahul.sharma@example.com');
 
   // AI Allocation Live Result
-  const [allocation, setAllocation] = useState<AllocationResult | null>(null);
   const [confirmedReservation, setConfirmedReservation] = useState<Reservation | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -76,9 +75,9 @@ export default function BookingWizardModal({
     state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
 
   // Re-calculate AI table allocation whenever inputs change
-  useEffect(() => {
-    if (!restaurant) return;
-    const res = findSmartTableAllocation({
+  const allocation = React.useMemo(() => {
+    if (!restaurant) return null;
+    return findSmartTableAllocation({
       restaurant,
       date,
       timeSlot,
@@ -86,7 +85,6 @@ export default function BookingWizardModal({
       preference: tablePreference,
       existingReservations: state.reservations,
     });
-    setAllocation(res);
   }, [restaurant, date, timeSlot, guestCount, tablePreference, state.reservations]);
 
   if (!isOpen) return null;
@@ -800,7 +798,7 @@ export default function BookingWizardModal({
                       <button
                         key={pm.id}
                         type="button"
-                        onClick={() => setPaymentMethod(pm.id as any)}
+                        onClick={() => setPaymentMethod(pm.id as 'UPI' | 'CARD' | 'NETBANKING' | 'CASH_AT_DESK')}
                         className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all ${
                           paymentMethod === pm.id
                             ? 'border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-2 ring-amber-500'

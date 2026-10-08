@@ -196,6 +196,7 @@ export interface ChatMessage {
       | 'MENU_RECOMMENDATION'
       | 'LOCATION_INFO'
       | 'OFFERS_INFO';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: any;
   };
 }

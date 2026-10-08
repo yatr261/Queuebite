@@ -48,7 +48,7 @@ export default function Header({
   const selectedRestaurant =
     state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
 
-  const roleLabels: Record<AppViewRole, { label: string; icon: any; color: string }> = {
+  const roleLabels: Record<AppViewRole, { label: string; icon: React.ElementType; color: string }> = {
     CUSTOMER: { label: 'Customer View', icon: User, color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30' },
     ADMIN: { label: 'Restaurant Admin', icon: LayoutDashboard, color: 'bg-amber-500/10 text-amber-600 border-amber-500/30' },
     KITCHEN: { label: 'Kitchen KDS', icon: ChefHat, color: 'bg-orange-500/10 text-orange-600 border-orange-500/30' },

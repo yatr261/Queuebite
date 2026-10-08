@@ -317,7 +317,7 @@ class StateStore {
     };
 
     // If pre-orders exist, schedule Kitchen Ticket
-    let updatedKitchen = [...this.state.kitchenTickets];
+    const updatedKitchen = [...this.state.kitchenTickets];
     if (data.preOrderItems.length > 0 && prepStartTime) {
       const ticket: KitchenTicket = {
         ticketId: `KT-${reservationId.split('-')[2]}`,
@@ -495,7 +495,7 @@ class StateStore {
     const waitlistIndex = this.state.waitlist.findIndex(
       (w) => w.status === 'WAITING' && w.preferredDate === res.date
     );
-    let updatedWaitlist = [...this.state.waitlist];
+    const updatedWaitlist = [...this.state.waitlist];
     if (waitlistIndex !== -1) {
       updatedWaitlist[waitlistIndex] = {
         ...updatedWaitlist[waitlistIndex],
