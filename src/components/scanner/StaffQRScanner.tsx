@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type { Html5Qrcode } from 'html5-qrcode';
 import { store, AppState } from '@/lib/store';
 import { Reservation } from '@/lib/types';
 import { formatDate, formatTime12h, formatCurrency } from '@/lib/utils';
@@ -19,7 +19,6 @@ import {
   Image as ImageIcon,
   ShieldAlert,
   SwitchCamera,
-  Upload,
 } from 'lucide-react';
 
 export type ScanVerificationResult =
@@ -47,6 +46,7 @@ export default function StaffQRScanner() {
   const readerDivId = 'queuebite-qr-reader';
   const fileHelperDivId = 'queuebite-qr-file-helper';
 
+  // Subscribe to store updates
   useEffect(() => {
     return store.subscribe(() => {
       setState({ ...store.getState() });
@@ -56,15 +56,27 @@ export default function StaffQRScanner() {
   const currentRestaurant =
     state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
 
-  // Fetch available camera devices
+  // Safely fetch available camera devices in browser
   useEffect(() => {
-    Html5Qrcode.getCameras()
+    if (typeof window === 'undefined') return;
+
+    let isSubscribed = true;
+    import('html5-qrcode')
+      .then(({ Html5Qrcode: QrScannerClass }) => {
+        return QrScannerClass.getCameras();
+      })
       .then((devices) => {
-        if (devices && devices.length > 0) {
-          setAvailableCameras(devices.map((d) => ({ id: d.id, label: d.label || `Camera ${d.id.substring(0, 4)}` })));
-          // Prefer back/environment camera if available
+        if (isSubscribed && devices && devices.length > 0) {
+          setAvailableCameras(
+            devices.map((d) => ({
+              id: d.id,
+              label: d.label || `Camera ${d.id.substring(0, 4)}`,
+            }))
+          );
           const backCam = devices.find(
-            (d) => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment')
+            (d) =>
+              d.label.toLowerCase().includes('back') ||
+              d.label.toLowerCase().includes('environment')
           );
           if (backCam) {
             setSelectedCameraId(backCam.id);
@@ -74,12 +86,16 @@ export default function StaffQRScanner() {
         }
       })
       .catch(() => {
-        // Camera enumeration error (handled gracefully)
+        // Camera enumeration fallback (handled gracefully)
       });
+
+    return () => {
+      isSubscribed = false;
+    };
   }, []);
 
-  // UNIFIED VERIFICATION PIPELINE (Calls same backend logic for Camera, Gallery Image, & Manual ID)
-  const verifyAndCheckInBooking = (payload: string) => {
+  // UNIFIED VERIFICATION PIPELINE (Single handler for Camera, Gallery Image, and Manual ID)
+  const verifyAndCheckInBooking = useCallback((payload: string) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
 
@@ -176,16 +192,20 @@ export default function StaffQRScanner() {
 
     setScanResult({ type: 'SUCCESS', reservation: updatedRes });
     isProcessingRef.current = false;
-  };
+  }, [currentRestaurant.id, state.reservations]);
 
   // Start Real Camera Scanner via html5-qrcode
-  const startCameraScanner = async () => {
+  const startCameraScanner = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
     setCameraError(null);
 
     const element = document.getElementById(readerDivId);
     if (!element) return;
 
     try {
+      const { Html5Qrcode: QrScannerClass } = await import('html5-qrcode');
+
       if (html5QrCodeRef.current) {
         try {
           await html5QrCodeRef.current.stop();
@@ -194,7 +214,7 @@ export default function StaffQRScanner() {
         }
       }
 
-      const html5QrCode = new Html5Qrcode(readerDivId);
+      const html5QrCode = new QrScannerClass(readerDivId);
       html5QrCodeRef.current = html5QrCode;
 
       const cameraConfig = selectedCameraId
@@ -215,15 +235,17 @@ export default function StaffQRScanner() {
           // Continuous frame parsing error (silent)
         }
       );
-    } catch (err: any) {
+    } catch {
       setCameraError(
         'Camera access is required to scan customer QR codes. Please ensure camera permissions are granted or try uploading a QR screenshot.'
       );
     }
-  };
+  }, [selectedCameraId, verifyAndCheckInBooking]);
 
   // Initialize camera scanner when active and no result showing
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     if (isScanningActive && !scanResult) {
       const timer = setTimeout(() => {
         startCameraScanner();
@@ -235,12 +257,12 @@ export default function StaffQRScanner() {
         }
       };
     }
-  }, [isScanningActive, scanResult, selectedCameraId]);
+  }, [isScanningActive, scanResult, selectedCameraId, startCameraScanner]);
 
   // Gallery Image Upload QR Decoding Handler
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || typeof window === 'undefined') return;
 
     setIsDecodingImage(true);
     setCameraError(null);
@@ -255,13 +277,13 @@ export default function StaffQRScanner() {
     }
 
     try {
-      // Create a temporary Html5Qrcode instance for image file parsing
-      const fileQrDecoder = new Html5Qrcode(fileHelperDivId);
+      const { Html5Qrcode: QrScannerClass } = await import('html5-qrcode');
+      const fileQrDecoder = new QrScannerClass(fileHelperDivId);
       const decodedText = await fileQrDecoder.scanFile(file, true);
       fileQrDecoder.clear();
       setIsDecodingImage(false);
       verifyAndCheckInBooking(decodedText);
-    } catch (err) {
+    } catch {
       setIsDecodingImage(false);
       setIsScanningActive(false);
       setScanResult({
@@ -271,7 +293,6 @@ export default function StaffQRScanner() {
       });
     }
 
-    // Reset file input value so user can re-upload same file if needed
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
