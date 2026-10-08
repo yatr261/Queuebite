@@ -38,6 +38,7 @@ export default function StaffQRScanner() {
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const isProcessingRef = useRef<boolean>(false);
+  const isCameraRunningRef = useRef<boolean>(false);
 
   const readerDivId = 'queuebite-qr-reader';
 
@@ -90,107 +91,111 @@ export default function StaffQRScanner() {
   }, []);
 
   // UNIFIED VERIFICATION PIPELINE (Single handler for Camera QR Scan & Manual Booking ID)
-  const verifyAndCheckInBooking = useCallback(
-    (payload: string) => {
-      if (isProcessingRef.current) return;
-      isProcessingRef.current = true;
+  const verifyAndCheckInBooking = useCallback((payload: string) => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
 
-      const raw = payload.trim();
-      if (!raw) {
-        isProcessingRef.current = false;
-        return;
-      }
-
-      // Stop camera scanning immediately to avoid duplicate scans
-      if (html5QrCodeRef.current) {
-        try {
-          html5QrCodeRef.current.stop().catch(() => {});
-        } catch {
-          // ignore
-        }
-      }
-      setIsScanningActive(false);
-
-      // Search for matching reservation in store
-      let matchedReservation: Reservation | undefined;
-
-      // 1. Check formatted payload: QUEUEBITE:RES:{reservationId}:{tableNumber}:{date}:{startTime}
-      if (raw.includes('QUEUEBITE:RES:')) {
-        const parts = raw.split(':');
-        const resId = parts[2];
-        matchedReservation = state.reservations.find(
-          (r) => r.reservationId.toLowerCase() === resId.toLowerCase()
-        );
-      }
-
-      // 2. Check regex match for QB booking ID format e.g. QB-2026-1048
-      if (!matchedReservation) {
-        const idMatch = raw.match(/QB-\d{4}-\d+/i);
-        if (idMatch) {
-          matchedReservation = state.reservations.find(
-            (r) => r.reservationId.toLowerCase() === idMatch[0].toLowerCase()
-          );
-        }
-      }
-
-      // 3. Fallback direct match on reservation ID string
-      if (!matchedReservation) {
-        matchedReservation = state.reservations.find(
-          (r) => r.reservationId.toLowerCase() === raw.toLowerCase()
-        );
-      }
-
-      // Evaluate Verification Status
-      if (!matchedReservation) {
-        setScanResult({ type: 'INVALID_QR', rawPayload: raw });
-        isProcessingRef.current = false;
-        return;
-      }
-
-      // Check Restaurant Ownership
-      if (matchedReservation.restaurantId !== currentRestaurant.id) {
-        setScanResult({
-          type: 'WRONG_RESTAURANT',
-          reservation: matchedReservation,
-          targetRestaurantName: matchedReservation.restaurantName,
-        });
-        isProcessingRef.current = false;
-        return;
-      }
-
-      // Check Cancelled Status
-      if (matchedReservation.bookingStatus === 'CANCELLED') {
-        setScanResult({ type: 'CANCELLED', reservation: matchedReservation });
-        isProcessingRef.current = false;
-        return;
-      }
-
-      // Check Already Checked-In / Seated / Completed Status
-      if (
-        matchedReservation.bookingStatus === 'CHECKED_IN' ||
-        matchedReservation.bookingStatus === 'SEATED' ||
-        matchedReservation.bookingStatus === 'COMPLETED'
-      ) {
-        setScanResult({ type: 'ALREADY_CHECKED_IN', reservation: matchedReservation });
-        isProcessingRef.current = false;
-        return;
-      }
-
-      // Valid CONFIRMED Reservation Check-In!
-      store.checkInReservation(matchedReservation.reservationId);
-
-      // Retrieve fresh updated reservation object
-      const updatedState = store.getState();
-      const updatedRes =
-        updatedState.reservations.find(
-          (r) => r.reservationId === matchedReservation!.reservationId
-        ) || matchedReservation;
-
-      setScanResult({ type: 'SUCCESS', reservation: updatedRes });
+    const raw = payload.trim();
+    if (!raw) {
       isProcessingRef.current = false;
-    },
-    [currentRestaurant.id, state.reservations]
-  );
+      return;
+    }
+
+    // Stop camera scanning immediately to avoid duplicate scans
+    if (html5QrCodeRef.current && isCameraRunningRef.current) {
+      try {
+        html5QrCodeRef.current.stop().catch(() => {});
+        isCameraRunningRef.current = false;
+      } catch {
+        // ignore stop errors
+      }
+    }
+    setIsScanningActive(false);
+
+    // Retrieve fresh snapshot directly from store to prevent hook stale closures
+    const currentState = store.getState();
+    const currentRest =
+      currentState.restaurants.find((r) => r.id === currentState.selectedRestaurantId) ||
+      currentState.restaurants[0];
+
+    // Search for matching reservation in store
+    let matchedReservation: Reservation | undefined;
+
+    // 1. Check formatted payload: QUEUEBITE:RES:{reservationId}:{tableNumber}:{date}:{startTime}
+    if (raw.includes('QUEUEBITE:RES:')) {
+      const parts = raw.split(':');
+      const resId = parts[2];
+      matchedReservation = currentState.reservations.find(
+        (r) => r.reservationId.toLowerCase() === resId.toLowerCase()
+      );
+    }
+
+    // 2. Check regex match for QB booking ID format e.g. QB-2026-1048
+    if (!matchedReservation) {
+      const idMatch = raw.match(/QB-\d{4}-\d+/i);
+      if (idMatch) {
+        matchedReservation = currentState.reservations.find(
+          (r) => r.reservationId.toLowerCase() === idMatch[0].toLowerCase()
+        );
+      }
+    }
+
+    // 3. Fallback direct match on reservation ID string
+    if (!matchedReservation) {
+      matchedReservation = currentState.reservations.find(
+        (r) => r.reservationId.toLowerCase() === raw.toLowerCase()
+      );
+    }
+
+    // Evaluate Verification Status
+    if (!matchedReservation) {
+      setScanResult({ type: 'INVALID_QR', rawPayload: raw });
+      isProcessingRef.current = false;
+      return;
+    }
+
+    // Check Restaurant Ownership
+    if (matchedReservation.restaurantId !== currentRest.id) {
+      setScanResult({
+        type: 'WRONG_RESTAURANT',
+        reservation: matchedReservation,
+        targetRestaurantName: matchedReservation.restaurantName,
+      });
+      isProcessingRef.current = false;
+      return;
+    }
+
+    // Check Cancelled Status
+    if (matchedReservation.bookingStatus === 'CANCELLED') {
+      setScanResult({ type: 'CANCELLED', reservation: matchedReservation });
+      isProcessingRef.current = false;
+      return;
+    }
+
+    // Check Already Checked-In / Seated / Completed Status
+    if (
+      matchedReservation.bookingStatus === 'CHECKED_IN' ||
+      matchedReservation.bookingStatus === 'SEATED' ||
+      matchedReservation.bookingStatus === 'COMPLETED'
+    ) {
+      setScanResult({ type: 'ALREADY_CHECKED_IN', reservation: matchedReservation });
+      isProcessingRef.current = false;
+      return;
+    }
+
+    // Valid CONFIRMED Reservation Check-In!
+    store.checkInReservation(matchedReservation.reservationId);
+
+    // Retrieve fresh updated reservation object
+    const updatedState = store.getState();
+    const updatedRes =
+      updatedState.reservations.find(
+        (r) => r.reservationId === matchedReservation!.reservationId
+      ) || matchedReservation;
+
+    setScanResult({ type: 'SUCCESS', reservation: updatedRes });
+    isProcessingRef.current = false;
+  }, []);
 
   // Start Real Camera Scanner via html5-qrcode
   const startCameraScanner = useCallback(async () => {
@@ -204,9 +209,10 @@ export default function StaffQRScanner() {
     try {
       const { Html5Qrcode: QrScannerClass } = await import('html5-qrcode');
 
-      if (html5QrCodeRef.current) {
+      if (html5QrCodeRef.current && isCameraRunningRef.current) {
         try {
           await html5QrCodeRef.current.stop();
+          isCameraRunningRef.current = false;
         } catch {
           // ignore stop errors
         }
@@ -233,29 +239,50 @@ export default function StaffQRScanner() {
           // Continuous frame parsing error (silent)
         }
       );
+      isCameraRunningRef.current = true;
     } catch {
+      isCameraRunningRef.current = false;
       setCameraError(
         'Camera access is required to scan customer QR codes. Please ensure camera permissions are granted or enter the Booking ID manually.'
       );
     }
   }, [selectedCameraId, verifyAndCheckInBooking]);
 
+  // Stop Camera Scanner helper
+  const stopCameraScanner = useCallback(async () => {
+    if (html5QrCodeRef.current && isCameraRunningRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+      } catch {
+        // ignore stop errors
+      } finally {
+        isCameraRunningRef.current = false;
+      }
+    }
+  }, []);
+
   // Initialize camera scanner when active and no result showing
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    let isMounted = true;
+
     if (isScanningActive && !scanResult) {
       const timer = setTimeout(() => {
-        startCameraScanner();
-      }, 300);
-      return () => {
-        clearTimeout(timer);
-        if (html5QrCodeRef.current) {
-          html5QrCodeRef.current.stop().catch(() => {});
+        if (isMounted) {
+          startCameraScanner();
         }
+      }, 300);
+
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+        stopCameraScanner();
       };
+    } else {
+      stopCameraScanner();
     }
-  }, [isScanningActive, scanResult, selectedCameraId, startCameraScanner]);
+  }, [isScanningActive, scanResult, selectedCameraId, startCameraScanner, stopCameraScanner]);
 
   const handleResetScan = () => {
     isProcessingRef.current = false;
@@ -356,6 +383,7 @@ export default function StaffQRScanner() {
               </div>
               <p className="text-[11px] text-rose-200/80 leading-relaxed">{cameraError}</p>
               <button
+                type="button"
                 onClick={startCameraScanner}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition-colors"
               >
@@ -372,7 +400,15 @@ export default function StaffQRScanner() {
           </div>
 
           {/* Manual Booking Code Entry Bar */}
-          <div className="pt-2 max-w-md mx-auto space-y-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (manualInput.trim()) {
+                verifyAndCheckInBooking(manualInput);
+              }
+            }}
+            className="pt-2 max-w-md mx-auto space-y-2"
+          >
             <p className="text-[11px] text-zinc-400 font-semibold">Or enter Booking ID manually:</p>
             <div className="flex items-center gap-2">
               <input
@@ -381,19 +417,24 @@ export default function StaffQRScanner() {
                 value={manualInput}
                 onChange={(e) => setManualInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') verifyAndCheckInBooking(manualInput);
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (manualInput.trim()) {
+                      verifyAndCheckInBooking(manualInput);
+                    }
+                  }
                 }}
                 className="flex-1 px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
               />
               <button
-                onClick={() => verifyAndCheckInBooking(manualInput)}
+                type="submit"
                 disabled={!manualInput.trim()}
                 className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-colors disabled:opacity-50"
               >
                 Verify
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -452,51 +493,39 @@ export default function StaffQRScanner() {
                 </div>
 
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-zinc-400">Date & Time</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400">Schedule</span>
                   <p className="font-bold text-zinc-900 dark:text-white mt-0.5">
-                    {formatDate(scanResult.reservation.date)} at {formatTime12h(scanResult.reservation.startTime)}
+                    {formatDate(scanResult.reservation.date)}
+                  </p>
+                  <p className="text-[11px] text-amber-600 font-semibold">
+                    Slot: {formatTime12h(scanResult.reservation.startTime)} - {formatTime12h(scanResult.reservation.endTime)}
                   </p>
                 </div>
               </div>
 
-              {/* Pre-ordered Food Items Section */}
-              {scanResult.reservation.preOrderItems && scanResult.reservation.preOrderItems.length > 0 ? (
-                <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 space-y-2.5">
-                  <div className="flex items-center justify-between font-bold text-amber-900 dark:text-amber-300 text-xs">
+              {/* Pre-ordered Food Items Summary */}
+              {scanResult.reservation.preOrderItems && scanResult.reservation.preOrderItems.length > 0 && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-amber-600 dark:text-amber-400">
                     <span className="flex items-center gap-1.5">
-                      <UtensilsCrossed className="w-4 h-4 text-amber-600" />
-                      Pre-Ordered Food Items ({scanResult.reservation.preOrderItems.length})
+                      <UtensilsCrossed className="w-4 h-4" /> Pre-ordered Food Items
                     </span>
-                    <span className="px-2 py-0.5 rounded-lg bg-amber-500 text-white text-[10px] uppercase">
-                      Kitchen Notified
-                    </span>
+                    <span>Total: {formatCurrency(scanResult.reservation.preOrderTotal || 0)}</span>
                   </div>
-
-                  <div className="divide-y divide-amber-200/60 dark:divide-amber-900/40 pt-1">
-                    {scanResult.reservation.preOrderItems.map((pi, idx) => (
-                      <div key={idx} className="py-1.5 flex justify-between items-center text-xs">
-                        <div>
-                          <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                            {pi.quantity}x {pi.item.name}
-                          </span>
-                          {pi.specialNotes && (
-                            <p className="text-[10px] text-zinc-500 italic">{pi.specialNotes}</p>
-                          )}
-                        </div>
-                        <span className="font-bold text-amber-600 dark:text-amber-400">
-                          {formatCurrency(pi.item.price * pi.quantity)}
+                  <div className="divide-y divide-amber-500/10 text-xs">
+                    {scanResult.reservation.preOrderItems.map((item, idx) => (
+                      <div key={item.item?.id || idx} className="py-1.5 flex justify-between items-center text-zinc-700 dark:text-zinc-300">
+                        <span>
+                          {item.quantity}x <strong>{item.item?.name}</strong>
                         </span>
+                        <span className="font-semibold">{formatCurrency((item.item?.price || 0) * item.quantity)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-              ) : (
-                <div className="p-3.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800/50 text-zinc-500 text-xs text-center font-medium">
-                  No food pre-ordered. Guest can order directly at Table {scanResult.reservation.tableNumber}.
-                </div>
               )}
 
-              {/* Kitchen Ticket Notification Confirmation */}
+              {/* Notification Badge */}
               <div className="flex items-center gap-2 p-3 rounded-xl bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 text-xs font-semibold">
                 <ChefHat className="w-4 h-4 text-purple-600" />
                 <span>Kitchen Display Ticket status automatically set to <strong>COOKING</strong>.</span>
@@ -634,6 +663,7 @@ export default function StaffQRScanner() {
 
           {/* RESET / SCAN ANOTHER CUSTOMER BUTTON */}
           <button
+            type="button"
             onClick={handleResetScan}
             className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-xs shadow-xl flex items-center justify-center gap-2 transition-transform active:scale-98 cursor-pointer"
           >
