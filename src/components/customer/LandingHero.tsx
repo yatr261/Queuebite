@@ -45,11 +45,6 @@ export default function LandingHero({
         <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-96 h-96 rounded-full bg-orange-600/15 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 max-w-3xl space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold tracking-wide">
-            <Zap className="w-3.5 h-3.5" />
-            AI-POWERED PRE-BOOKING & QUEUE ECOSYSTEM
-          </div>
-
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.15]">
             Skip the Queue.{' '}
             <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-amber-200 bg-clip-text text-transparent">
