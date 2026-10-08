@@ -16,10 +16,10 @@ import {
   Camera,
   ChefHat,
   MapPin,
-  Calendar,
-  Users,
+  Image as ImageIcon,
   ShieldAlert,
-  Search,
+  SwitchCamera,
+  Upload,
 } from 'lucide-react';
 
 export type ScanVerificationResult =
@@ -27,7 +27,8 @@ export type ScanVerificationResult =
   | { type: 'ALREADY_CHECKED_IN'; reservation: Reservation }
   | { type: 'CANCELLED'; reservation: Reservation }
   | { type: 'WRONG_RESTAURANT'; reservation: Reservation; targetRestaurantName: string }
-  | { type: 'INVALID_QR'; rawPayload: string };
+  | { type: 'INVALID_QR'; rawPayload: string }
+  | { type: 'IMAGE_DECODE_FAILED'; errorMsg: string };
 
 export default function StaffQRScanner() {
   const [state, setState] = useState<AppState>(store.getState());
@@ -35,9 +36,16 @@ export default function StaffQRScanner() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isScanningActive, setIsScanningActive] = useState<boolean>(true);
   const [manualInput, setManualInput] = useState<string>('');
+  const [availableCameras, setAvailableCameras] = useState<Array<{ id: string; label: string }>>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [isDecodingImage, setIsDecodingImage] = useState<boolean>(false);
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
+
   const readerDivId = 'queuebite-qr-reader';
+  const fileHelperDivId = 'queuebite-qr-file-helper';
 
   useEffect(() => {
     return store.subscribe(() => {
@@ -48,15 +56,53 @@ export default function StaffQRScanner() {
   const currentRestaurant =
     state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
 
-  // Helper function to process scanned or typed QR payload string
-  const processQrPayload = (payload: string) => {
+  // Fetch available camera devices
+  useEffect(() => {
+    Html5Qrcode.getCameras()
+      .then((devices) => {
+        if (devices && devices.length > 0) {
+          setAvailableCameras(devices.map((d) => ({ id: d.id, label: d.label || `Camera ${d.id.substring(0, 4)}` })));
+          // Prefer back/environment camera if available
+          const backCam = devices.find(
+            (d) => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment')
+          );
+          if (backCam) {
+            setSelectedCameraId(backCam.id);
+          } else {
+            setSelectedCameraId(devices[0].id);
+          }
+        }
+      })
+      .catch(() => {
+        // Camera enumeration error (handled gracefully)
+      });
+  }, []);
+
+  // UNIFIED VERIFICATION PIPELINE (Calls same backend logic for Camera, Gallery Image, & Manual ID)
+  const verifyAndCheckInBooking = (payload: string) => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+
     const raw = payload.trim();
-    if (!raw) return;
+    if (!raw) {
+      isProcessingRef.current = false;
+      return;
+    }
+
+    // Stop camera scanning immediately to avoid duplicate scans
+    if (html5QrCodeRef.current) {
+      try {
+        html5QrCodeRef.current.stop().catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
+    setIsScanningActive(false);
 
     // Search for matching reservation in store
     let matchedReservation: Reservation | undefined;
 
-    // 1. Check formatted string: QUEUEBITE:RES:{reservationId}:{tableNumber}:{date}:{startTime}
+    // 1. Check formatted payload: QUEUEBITE:RES:{reservationId}:{tableNumber}:{date}:{startTime}
     if (raw.includes('QUEUEBITE:RES:')) {
       const parts = raw.split(':');
       const resId = parts[2];
@@ -75,19 +121,17 @@ export default function StaffQRScanner() {
       }
     }
 
-    // 3. Fallback direct match on reservation ID
+    // 3. Fallback direct match on reservation ID string
     if (!matchedReservation) {
       matchedReservation = state.reservations.find(
         (r) => r.reservationId.toLowerCase() === raw.toLowerCase()
       );
     }
 
-    // Stop scanning view
-    setIsScanningActive(false);
-
     // Evaluate Verification Status
     if (!matchedReservation) {
       setScanResult({ type: 'INVALID_QR', rawPayload: raw });
+      isProcessingRef.current = false;
       return;
     }
 
@@ -98,12 +142,14 @@ export default function StaffQRScanner() {
         reservation: matchedReservation,
         targetRestaurantName: matchedReservation.restaurantName,
       });
+      isProcessingRef.current = false;
       return;
     }
 
     // Check Cancelled Status
     if (matchedReservation.bookingStatus === 'CANCELLED') {
       setScanResult({ type: 'CANCELLED', reservation: matchedReservation });
+      isProcessingRef.current = false;
       return;
     }
 
@@ -114,6 +160,7 @@ export default function StaffQRScanner() {
       matchedReservation.bookingStatus === 'COMPLETED'
     ) {
       setScanResult({ type: 'ALREADY_CHECKED_IN', reservation: matchedReservation });
+      isProcessingRef.current = false;
       return;
     }
 
@@ -128,13 +175,13 @@ export default function StaffQRScanner() {
       ) || matchedReservation;
 
     setScanResult({ type: 'SUCCESS', reservation: updatedRes });
+    isProcessingRef.current = false;
   };
 
   // Start Real Camera Scanner via html5-qrcode
   const startCameraScanner = async () => {
     setCameraError(null);
 
-    // Ensure DOM element is present
     const element = document.getElementById(readerDivId);
     if (!element) return;
 
@@ -150,16 +197,19 @@ export default function StaffQRScanner() {
       const html5QrCode = new Html5Qrcode(readerDivId);
       html5QrCodeRef.current = html5QrCode;
 
+      const cameraConfig = selectedCameraId
+        ? { deviceId: { exact: selectedCameraId } }
+        : { facingMode: 'environment' };
+
       await html5QrCode.start(
-        { facingMode: 'environment' }, // Prefer rear camera on mobile devices
+        cameraConfig,
         {
           fps: 10,
-          qrbox: { width: 240, height: 240 },
+          qrbox: { width: 250, height: 250 },
         },
         (decodedText) => {
-          // QR Code Detected! Stop camera and process payload
-          html5QrCode.stop().catch(() => {});
-          processQrPayload(decodedText);
+          // Continuous real-time detection: Stop camera stream immediately and process payload
+          verifyAndCheckInBooking(decodedText);
         },
         () => {
           // Continuous frame parsing error (silent)
@@ -167,12 +217,12 @@ export default function StaffQRScanner() {
       );
     } catch (err: any) {
       setCameraError(
-        'Camera access is required to scan customer QR codes. Please ensure camera permissions are granted.'
+        'Camera access is required to scan customer QR codes. Please ensure camera permissions are granted or try uploading a QR screenshot.'
       );
     }
   };
 
-  // Effect to initialize camera when scanner mode is active
+  // Initialize camera scanner when active and no result showing
   useEffect(() => {
     if (isScanningActive && !scanResult) {
       const timer = setTimeout(() => {
@@ -185,9 +235,50 @@ export default function StaffQRScanner() {
         }
       };
     }
-  }, [isScanningActive, scanResult]);
+  }, [isScanningActive, scanResult, selectedCameraId]);
+
+  // Gallery Image Upload QR Decoding Handler
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsDecodingImage(true);
+    setCameraError(null);
+
+    // Stop active camera scan if running
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      // Create a temporary Html5Qrcode instance for image file parsing
+      const fileQrDecoder = new Html5Qrcode(fileHelperDivId);
+      const decodedText = await fileQrDecoder.scanFile(file, true);
+      fileQrDecoder.clear();
+      setIsDecodingImage(false);
+      verifyAndCheckInBooking(decodedText);
+    } catch (err) {
+      setIsDecodingImage(false);
+      setIsScanningActive(false);
+      setScanResult({
+        type: 'IMAGE_DECODE_FAILED',
+        errorMsg:
+          'No QR code detected in this image. Please upload a clearer image containing the complete QueueBite QR code.',
+      });
+    }
+
+    // Reset file input value so user can re-upload same file if needed
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleResetScan = () => {
+    isProcessingRef.current = false;
     setScanResult(null);
     setCameraError(null);
     setManualInput('');
@@ -196,6 +287,18 @@ export default function StaffQRScanner() {
 
   return (
     <div className="space-y-6 pb-16 max-w-3xl mx-auto">
+      {/* Hidden helper element for image file decoding */}
+      <div id={fileHelperDivId} className="hidden" />
+
+      {/* Hidden file input for Gallery Upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileUpload}
+      />
+
       {/* Scanner Header Banner */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-zinc-900 via-zinc-950 to-purple-950 text-white border border-zinc-800 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
@@ -222,9 +325,9 @@ export default function StaffQRScanner() {
         </div>
       </div>
 
-      {/* REAL CAMERA SCANNER VIEW (When scanning is active and no result is showing) */}
+      {/* REAL CAMERA & MULTI-INPUT SCANNER VIEW */}
       {isScanningActive && !scanResult && (
-        <div className="p-6 sm:p-8 rounded-3xl bg-zinc-950 border border-zinc-800 text-center space-y-5 shadow-2xl relative overflow-hidden">
+        <div className="p-6 sm:p-8 rounded-3xl bg-zinc-950 border border-zinc-800 text-center space-y-6 shadow-2xl relative overflow-hidden">
           <div className="space-y-1">
             <h2 className="text-base font-extrabold text-white flex items-center justify-center gap-2">
               <Camera className="w-4 h-4 text-purple-400 animate-pulse" />
@@ -235,13 +338,32 @@ export default function StaffQRScanner() {
             </p>
           </div>
 
+          {/* Camera Selection Dropdown (If multiple cameras detected) */}
+          {availableCameras.length > 1 && (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
+              <SwitchCamera className="w-3.5 h-3.5 text-purple-400" />
+              <span className="text-[11px] font-semibold text-zinc-400">Camera:</span>
+              <select
+                value={selectedCameraId}
+                onChange={(e) => setSelectedCameraId(e.target.value)}
+                className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+              >
+                {availableCameras.map((cam) => (
+                  <option key={cam.id} value={cam.id} className="bg-zinc-900 text-white">
+                    {cam.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Camera Viewfinder & Scanner Frame */}
           <div className="relative w-full max-w-sm mx-auto min-h-[300px] rounded-3xl overflow-hidden bg-black border-2 border-purple-500/50 shadow-inner flex items-center justify-center">
-            {/* HTML5 QR Code Container */}
+            {/* HTML5 QR Code Video Stream Container */}
             <div id={readerDivId} className="w-full h-full text-white" />
 
             {/* Custom Overlay Scanner Target Reticle */}
-            {!cameraError && (
+            {!cameraError && !isDecodingImage && (
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
                 <div className="w-60 h-60 border-2 border-purple-400 rounded-2xl relative shadow-[0_0_20px_rgba(168,85,247,0.3)]">
                   {/* Corners accent */}
@@ -253,6 +375,13 @@ export default function StaffQRScanner() {
                   {/* Laser Scan Bar */}
                   <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent top-1/2 animate-pulse shadow-md shadow-amber-400/50" />
                 </div>
+              </div>
+            )}
+
+            {isDecodingImage && (
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center text-white space-y-2">
+                <RefreshCw className="w-8 h-8 animate-spin text-purple-400" />
+                <p className="text-xs font-bold">Decoding QR Image...</p>
               </div>
             )}
           </div>
@@ -274,6 +403,25 @@ export default function StaffQRScanner() {
             </div>
           )}
 
+          {/* Action Divider OR */}
+          <div className="flex items-center gap-4 max-w-md mx-auto">
+            <div className="flex-1 h-px bg-zinc-800" />
+            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">OR</span>
+            <div className="flex-1 h-px bg-zinc-800" />
+          </div>
+
+          {/* Gallery Image Upload Button */}
+          <div className="max-w-md mx-auto">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-purple-600/20 via-indigo-600/20 to-purple-600/20 hover:from-purple-600/30 hover:to-indigo-600/30 text-purple-300 border border-purple-500/40 font-bold text-xs shadow-md flex items-center justify-center gap-2.5 transition-all transform active:scale-98 cursor-pointer"
+            >
+              <ImageIcon className="w-4 h-4 text-purple-400" />
+              <span>🖼️ Upload QR Image from Gallery</span>
+            </button>
+            <p className="text-[10px] text-zinc-500 mt-1">Select a screenshot or photo of customer QR pass</p>
+          </div>
+
           {/* Manual Booking Code Entry Bar */}
           <div className="pt-3 border-t border-zinc-900 max-w-md mx-auto space-y-2">
             <p className="text-[11px] text-zinc-500 font-semibold">Or enter Booking ID manually:</p>
@@ -284,12 +432,12 @@ export default function StaffQRScanner() {
                 value={manualInput}
                 onChange={(e) => setManualInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') processQrPayload(manualInput);
+                  if (e.key === 'Enter') verifyAndCheckInBooking(manualInput);
                 }}
                 className="flex-1 px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
               />
               <button
-                onClick={() => processQrPayload(manualInput)}
+                onClick={() => verifyAndCheckInBooking(manualInput)}
                 disabled={!manualInput.trim()}
                 className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition-colors disabled:opacity-50"
               >
@@ -524,13 +672,36 @@ export default function StaffQRScanner() {
                     Invalid QR Code
                   </h2>
                   <p className="text-xs text-zinc-500">
-                    Please ask the customer to show the QR code generated for their QueueBite reservation.
+                    Please upload or scan a valid QueueBite booking QR code.
                   </p>
                 </div>
               </div>
 
               <p className="text-[11px] font-mono text-zinc-400 break-all">
                 Payload scanned: &quot;{scanResult.rawPayload}&quot;
+              </p>
+            </div>
+          )}
+
+          {/* 6. IMAGE DECODE FAILED CARD */}
+          {scanResult.type === 'IMAGE_DECODE_FAILED' && (
+            <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border-2 border-rose-400 shadow-xl space-y-4">
+              <div className="flex items-center gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-600 flex items-center justify-center">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-rose-600 dark:text-rose-400">
+                    No QR Code Detected
+                  </h2>
+                  <p className="text-xs text-zinc-500">
+                    Image decoding error
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                {scanResult.errorMsg}
               </p>
             </div>
           )}
