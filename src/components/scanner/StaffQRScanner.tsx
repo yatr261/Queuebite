@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Html5Qrcode } from 'html5-qrcode';
+import jsQR from 'jsqr';
 import { store, AppState } from '@/lib/store';
 import { Reservation } from '@/lib/types';
 import { formatDate, formatTime12h, formatCurrency } from '@/lib/utils';
@@ -27,6 +28,122 @@ export type ScanVerificationResult =
   | { type: 'CANCELLED'; reservation: Reservation }
   | { type: 'WRONG_RESTAURANT'; reservation: Reservation; targetRestaurantName: string }
   | { type: 'INVALID_QR'; rawPayload: string };
+
+// Helper function to decode QR code from an Image File (JPG, PNG, WEBP, screenshots)
+async function decodeQRFromImageFile(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
+  let img: HTMLImageElement;
+
+  try {
+    img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('IMAGE_LOAD_FAILED'));
+      image.src = objectUrl;
+    });
+  } catch {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error('IMAGE_LOAD_FAILED');
+  }
+
+  const origWidth = img.naturalWidth || img.width;
+  const origHeight = img.naturalHeight || img.height;
+
+  if (!origWidth || !origHeight) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error('IMAGE_LOAD_FAILED');
+  }
+
+  // Multi-resolution downsampling list for high-res mobile screenshots
+  const scales = [
+    { w: origWidth, h: origHeight }, // Original size
+    { w: 1200, h: Math.round((origHeight * 1200) / origWidth) }, // High
+    { w: 800, h: Math.round((origHeight * 800) / origWidth) }, // Medium
+    { w: 500, h: Math.round((origHeight * 500) / origWidth) }, // Low
+  ].filter((s) => s.w > 0 && s.h > 0);
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  if (ctx) {
+    // 1. Full Image Scan across multiple resolutions
+    for (const scale of scales) {
+      canvas.width = scale.w;
+      canvas.height = scale.h;
+      ctx.clearRect(0, 0, scale.w, scale.h);
+      ctx.drawImage(img, 0, 0, scale.w, scale.h);
+
+      try {
+        const imageData = ctx.getImageData(0, 0, scale.w, scale.h);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth',
+        });
+        if (code && code.data && code.data.trim()) {
+          URL.revokeObjectURL(objectUrl);
+          return code.data.trim();
+        }
+      } catch {
+        // Try next resolution
+      }
+    }
+
+    // 2. Central Crop Region Scan (common for mobile screenshots with header/footer cards)
+    try {
+      const cropW = Math.round(origWidth * 0.7);
+      const cropH = Math.round(origHeight * 0.7);
+      const cropX = Math.round((origWidth - cropW) / 2);
+      const cropY = Math.round((origHeight - cropH) / 2);
+
+      canvas.width = cropW;
+      canvas.height = cropH;
+      ctx.clearRect(0, 0, cropW, cropH);
+      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+      const croppedData = ctx.getImageData(0, 0, cropW, cropH);
+      const code = jsQR(croppedData.data, croppedData.width, croppedData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+      if (code && code.data && code.data.trim()) {
+        URL.revokeObjectURL(objectUrl);
+        return code.data.trim();
+      }
+    } catch {
+      // Continue to offline scanner fallback
+    }
+  }
+
+  // 3. Fallback to Html5Qrcode offline scan on isolated hidden DOM element
+  try {
+    const tempDiv = document.createElement('div');
+    const tempId = `temp-qr-file-${Date.now()}`;
+    tempDiv.id = tempId;
+    tempDiv.style.display = 'none';
+    document.body.appendChild(tempDiv);
+
+    const { Html5Qrcode } = await import('html5-qrcode');
+    const offlineScanner = new Html5Qrcode(tempId);
+    const decodedText = await offlineScanner.scanFile(file, false);
+
+    try {
+      offlineScanner.clear();
+    } catch {
+      // ignore
+    }
+    if (tempDiv.parentNode) {
+      tempDiv.parentNode.removeChild(tempDiv);
+    }
+
+    URL.revokeObjectURL(objectUrl);
+    if (decodedText && decodedText.trim()) {
+      return decodedText.trim();
+    }
+  } catch {
+    // Offline fallback failed
+  }
+
+  URL.revokeObjectURL(objectUrl);
+  throw new Error('NO_QR_DETECTED');
+}
 
 export default function StaffQRScanner() {
   const [state, setState] = useState<AppState>(store.getState());
@@ -322,28 +439,19 @@ export default function StaffQRScanner() {
     setIsProcessingUpload(true);
 
     try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const tempScanner = new Html5Qrcode(readerDivId);
-
-      try {
-        const decodedText = await tempScanner.scanFile(file, false);
-        tempScanner.clear();
-        setIsProcessingUpload(false);
-        verifyAndCheckInBooking(decodedText);
-      } catch {
-        try {
-          tempScanner.clear();
-        } catch {
-          // ignore
-        }
-        setIsProcessingUpload(false);
+      const decodedText = await decodeQRFromImageFile(file);
+      setIsProcessingUpload(false);
+      verifyAndCheckInBooking(decodedText);
+    } catch (err: unknown) {
+      setIsProcessingUpload(false);
+      const errorObj = err as Error;
+      if (errorObj?.message === 'IMAGE_LOAD_FAILED') {
+        setUploadError('Unable to load this image. Please try another image.');
+      } else {
         setUploadError(
-          "QR code could not be detected. Please select a clear image containing the customer's QueueBite booking QR."
+          'No QR code detected. Please select a clear image containing the QueueBite booking QR.'
         );
       }
-    } catch {
-      setIsProcessingUpload(false);
-      setUploadError('Failed to process image file. Please select a valid photo.');
     } finally {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
