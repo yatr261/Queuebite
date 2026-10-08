@@ -16,7 +16,6 @@ import {
   Clock,
   CalendarCheck,
   ChevronDown,
-  LucideIcon,
 } from 'lucide-react';
 
 export default function Header({
@@ -49,9 +48,9 @@ export default function Header({
   const selectedRestaurant =
     state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
 
-  const roleLabels: Record<AppViewRole, { label: string; icon: LucideIcon; color: string }> = {
+  const roleLabels: Record<AppViewRole, { label: string; icon: any; color: string }> = {
     CUSTOMER: { label: 'Customer View', icon: User, color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30' },
-    ADMIN: { label: 'Admin Panel', icon: LayoutDashboard, color: 'bg-amber-500/10 text-amber-600 border-amber-500/30' },
+    ADMIN: { label: 'Restaurant Admin', icon: LayoutDashboard, color: 'bg-amber-500/10 text-amber-600 border-amber-500/30' },
     KITCHEN: { label: 'Kitchen KDS', icon: ChefHat, color: 'bg-orange-500/10 text-orange-600 border-orange-500/30' },
     SCANNER: { label: 'Staff QR Scanner', icon: QrCode, color: 'bg-purple-500/10 text-purple-600 border-purple-500/30' },
   };
@@ -80,7 +79,7 @@ export default function Header({
                   QUEUEBITE
                 </span>
                 <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                  Smart Pre-Book
+                  AI Pre-Book
                 </span>
               </div>
               <p className="text-[10px] text-zinc-500 dark:text-zinc-400 hidden sm:block">
@@ -137,6 +136,16 @@ export default function Header({
 
           {/* Right Action Cluster */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* AI Assistant Button */}
+            <button
+              onClick={() => store.setAiChatOpen(!state.isAiChatOpen)}
+              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-semibold shadow-md shadow-orange-500/20 hover:from-amber-600 hover:to-orange-600 transition-all active:scale-95"
+            >
+              <Bot className="w-3.5 h-3.5 animate-bounce" />
+              <span className="hidden sm:inline">AI Assistant</span>
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-300 animate-ping" />
+            </button>
+
             {/* Notifications Dropdown */}
             <div className="relative">
               <button
@@ -212,11 +221,7 @@ export default function Header({
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-sm transition-all ${currentRoleInfo.color}`}
               >
                 <RoleIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">
-                  {state.currentUser && state.currentRole !== 'CUSTOMER'
-                    ? `${state.jobRoles?.find(r => r.code === state.currentUser?.role)?.name || state.currentUser.role}`
-                    : currentRoleInfo.label}
-                </span>
+                <span className="hidden sm:inline">{currentRoleInfo.label}</span>
                 <ChevronDown className="w-3 h-3 opacity-60" />
               </button>
 
@@ -225,7 +230,7 @@ export default function Header({
                   <p className="text-[10px] uppercase font-bold text-zinc-400 px-3 py-1.5 tracking-wider">
                     Switch App Role
                   </p>
-                  {(['CUSTOMER', 'ADMIN'] as const).map((roleKey) => {
+                  {(Object.keys(roleLabels) as AppViewRole[]).map((roleKey) => {
                     const item = roleLabels[roleKey];
                     const Icon = item.icon;
                     const isSelected = state.currentRole === roleKey;

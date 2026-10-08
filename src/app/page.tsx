@@ -11,12 +11,13 @@ import { ModifyBookingModal, CancelBookingModal } from '@/components/customer/Mo
 import LiveQueueModal from '@/components/customer/LiveQueueModal';
 import WaitlistModal from '@/components/customer/WaitlistModal';
 import MyBookingsView from '@/components/customer/MyBookingsView';
-
+import AdminDashboard from '@/components/admin/AdminDashboard';
+import KitchenKDS from '@/components/kitchen/KitchenKDS';
+import StaffQRScanner from '@/components/scanner/StaffQRScanner';
+import AIAssistantModal from '@/components/ai/AIAssistantModal';
 import { store, AppState } from '@/lib/store';
-import { useRouter } from 'next/navigation';
 
 export default function Home() {
-  const router = useRouter();
   const [state, setState] = useState<AppState>(store.getState());
   const [customerTab, setCustomerTab] = useState<string>('home');
   const [selectedRestDetailId, setSelectedRestDetailId] = useState<string | null>(null);
@@ -26,14 +27,6 @@ export default function Home() {
       setState({ ...store.getState() });
     });
   }, []);
-
-  // Redirect to /admin if current role is ADMIN, KITCHEN, or SCANNER
-  useEffect(() => {
-    const isStaff = state.currentRole === 'ADMIN' || state.currentRole === 'KITCHEN' || state.currentRole === 'SCANNER';
-    if (isStaff) {
-      router.push('/admin');
-    }
-  }, [state.currentRole, router]);
 
   const currentRestaurant =
     state.restaurants.find((r) => r.id === (selectedRestDetailId || state.selectedRestaurantId)) ||
@@ -77,12 +70,14 @@ export default function Home() {
           </>
         )}
 
-        {/* Redirecting fallback for staff roles */}
-        {(state.currentRole === 'ADMIN' || state.currentRole === 'KITCHEN' || state.currentRole === 'SCANNER') && (
-          <div className="text-center py-12">
-            <p className="text-zinc-500 font-medium text-xs">Redirecting to Admin Portal...</p>
-          </div>
-        )}
+        {/* Role: RESTAURANT ADMIN */}
+        {state.currentRole === 'ADMIN' && <AdminDashboard />}
+
+        {/* Role: KITCHEN KDS */}
+        {state.currentRole === 'KITCHEN' && <KitchenKDS />}
+
+        {/* Role: STAFF QR SCANNER */}
+        {state.currentRole === 'SCANNER' && <StaffQRScanner />}
       </main>
 
       {/* Global Modals */}
@@ -97,13 +92,11 @@ export default function Home() {
       />
 
       <ModifyBookingModal
-        key={state.selectedBookingForModify?.reservationId || 'modify-none'}
         booking={state.selectedBookingForModify}
         onClose={() => store.setSelectedBookingForModify(null)}
       />
 
       <CancelBookingModal
-        key={state.selectedBookingForCancel?.reservationId || 'cancel-none'}
         booking={state.selectedBookingForCancel}
         onClose={() => store.setSelectedBookingForCancel(null)}
       />
@@ -118,7 +111,7 @@ export default function Home() {
         onClose={() => store.setActiveWaitlistModal(false)}
       />
 
-
+      <AIAssistantModal />
 
       {/* Footer */}
       <Footer />

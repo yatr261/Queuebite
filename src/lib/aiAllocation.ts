@@ -64,7 +64,7 @@ export function findSmartTableAllocation(params: {
   if (reqStartMin < openMin || reqEndMin > closeMin) {
     return {
       isAvailable: false,
-      aiExplanation: `${restaurant.name} operates between ${restaurant.openingTime} and ${restaurant.closingTime}. The requested slot is outside dining hours.`,
+      aiExplanation: `Spice Garden operates between ${restaurant.openingTime} and ${restaurant.closingTime}. The requested slot is outside dining hours.`,
       isExactPreferenceMatch: false,
       conflictReason: 'OUTSIDE_HOURS',
     };
@@ -124,7 +124,7 @@ export function findSmartTableAllocation(params: {
       return {
         isAvailable: true,
         assignedTable: bestTable,
-        aiExplanation: `Great news! System matched ${bestTable.tableNumber} (${bestTable.capacity}-seater ${sectionName}) for ${guestCount} guests at ${timeSlot}.`,
+        aiExplanation: `Great news! AI allocated ${bestTable.tableNumber} (${bestTable.capacity}-seater ${sectionName}) for ${guestCount} guests at ${timeSlot}.`,
         isExactPreferenceMatch: true,
       };
     }
@@ -137,7 +137,7 @@ export function findSmartTableAllocation(params: {
     return {
       isAvailable: true,
       assignedTable: alternativeTable,
-      aiExplanation: `${requestedSection.toUpperCase()} tables are fully booked for ${timeSlot}. System found an excellent alternative: ${alternativeTable.tableNumber} (${alternativeTable.capacity}-seat ${altSection}) at the same time.`,
+      aiExplanation: `${requestedSection.toUpperCase()} tables are fully booked for ${timeSlot}. AI found an excellent alternative: ${alternativeTable.tableNumber} (${alternativeTable.capacity}-seat ${altSection}) at the same time.`,
       isExactPreferenceMatch: false,
       alternativeTable,
     };
@@ -170,7 +170,7 @@ export function findSmartTableAllocation(params: {
 
   return {
     isAvailable: false,
-    aiExplanation: `All suitable tables are fully booked for ${timeSlot}. We recommend choosing nearby available slots or joining the live waitlist.`,
+    aiExplanation: `All suitable tables are fully booked for ${timeSlot}. AI recommends nearby available slots or joining the live waitlist.`,
     isExactPreferenceMatch: false,
     alternativeTimeSlots: alternativeSlots,
     conflictReason: 'SLOT_FULL',

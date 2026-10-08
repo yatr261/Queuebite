@@ -12,10 +12,6 @@ import {
   PreOrderItem,
   TableSection,
   Table,
-  PortalUser,
-  JobRole,
-  MenuItem,
-  DailySpecial,
 } from './types';
 import {
   INITIAL_RESTAURANTS,
@@ -53,13 +49,10 @@ export interface AppState {
   activeQueueModal: boolean;
   activeScannerModal: boolean;
   activeCheckInBookingId: string | null;
-  selectedBookingForQR: Reservation | QueueToken | null;
+  selectedBookingForQR: Reservation | null;
   selectedBookingForModify: Reservation | null;
   selectedBookingForCancel: Reservation | null;
   activeWaitlistModal: boolean;
-  users: PortalUser[];
-  currentUser: PortalUser | null;
-  jobRoles: JobRole[];
 }
 
 const DEFAULT_STATE: AppState = {
@@ -88,56 +81,6 @@ const DEFAULT_STATE: AppState = {
   selectedBookingForModify: null,
   selectedBookingForCancel: null,
   activeWaitlistModal: false,
-  users: [
-    {
-      id: 'user-default-admin',
-      name: 'System Admin',
-      email: 'admin@queuebite.com',
-      passwordHash: 'admin123',
-      role: 'ADMIN',
-    },
-    {
-      id: 'user-chef',
-      name: 'Chef Anand',
-      email: 'chef@queuebite.com',
-      passwordHash: 'chef123',
-      role: 'KITCHEN',
-    },
-    {
-      id: 'user-scanner',
-      name: 'Rohan Scanner',
-      email: 'scanner@queuebite.com',
-      passwordHash: 'scanner123',
-      role: 'SCANNER',
-    },
-  ],
-  currentUser: null,
-  jobRoles: [
-    {
-      id: 'role-admin',
-      name: 'System Admin',
-      code: 'ADMIN',
-      description: 'Full administrative access to settings, staff registry, analytics, KDS, and QR scanner.',
-      permissions: ['DASHBOARD', 'KITCHEN', 'SCANNER', 'STAFF_MANAGEMENT'],
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'role-kitchen',
-      name: 'Kitchen Staff',
-      code: 'KITCHEN',
-      description: 'Access to Kitchen Display System (KDS) and cooking order tracking.',
-      permissions: ['KITCHEN'],
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'role-scanner',
-      name: 'Scanner Staff',
-      code: 'SCANNER',
-      description: 'Access to entrance door QR pass scanning and check-ins.',
-      permissions: ['SCANNER'],
-      createdAt: new Date().toISOString(),
-    },
-  ],
 };
 
 type Listener = () => void;
@@ -167,8 +110,6 @@ class StateStore {
           kitchenTickets: parsed.kitchenTickets || INITIAL_KITCHEN_TICKETS,
           waitlist: parsed.waitlist || INITIAL_WAITLIST,
           notifications: parsed.notifications || INITIAL_NOTIFICATIONS,
-          users: parsed.users || DEFAULT_STATE.users,
-          jobRoles: parsed.jobRoles || DEFAULT_STATE.jobRoles,
         };
       }
     } catch {
@@ -190,8 +131,6 @@ class StateStore {
           notifications: this.state.notifications,
           chatMessages: this.state.chatMessages,
           currentRole: this.state.currentRole,
-          users: this.state.users,
-          jobRoles: this.state.jobRoles,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
       } catch {
@@ -225,8 +164,6 @@ class StateStore {
       kitchenTickets: JSON.parse(JSON.stringify(INITIAL_KITCHEN_TICKETS)),
       waitlist: JSON.parse(JSON.stringify(INITIAL_WAITLIST)),
       notifications: JSON.parse(JSON.stringify(INITIAL_NOTIFICATIONS)),
-      users: JSON.parse(JSON.stringify(DEFAULT_STATE.users)),
-      jobRoles: JSON.parse(JSON.stringify(DEFAULT_STATE.jobRoles)),
     };
     this.notify();
   }
@@ -235,109 +172,6 @@ class StateStore {
   public setRole(role: AppViewRole) {
     this.state = { ...this.state, currentRole: role };
     this.notify();
-  }
-
-  public registerUser(user: PortalUser) {
-    this.state = {
-      ...this.state,
-      users: [...this.state.users, user],
-    };
-    this.notify();
-  }
-
-  public setCurrentUser(user: PortalUser | null) {
-    this.state = { ...this.state, currentUser: user };
-    this.notify();
-  }
-
-  // --- Dynamic Staff & Roles Actions ---
-  public addStaff(user: PortalUser) {
-    this.state = {
-      ...this.state,
-      users: [...this.state.users, user],
-    };
-    this.notify();
-  }
-
-  public updateStaff(userId: string, updates: Partial<PortalUser>) {
-    this.state = {
-      ...this.state,
-      users: this.state.users.map((u) => (u.id === userId ? { ...u, ...updates } : u)),
-    };
-    // Sync current user state if they updated themselves
-    if (this.state.currentUser?.id === userId) {
-      this.state.currentUser = { ...this.state.currentUser, ...updates };
-    }
-    this.notify();
-  }
-
-  public deleteStaff(userId: string) {
-    this.state = {
-      ...this.state,
-      users: this.state.users.filter((u) => u.id !== userId),
-    };
-    if (this.state.currentUser?.id === userId) {
-      this.state.currentUser = null;
-      this.state.currentRole = 'CUSTOMER';
-    }
-    this.notify();
-  }
-
-  public addJobRole(role: JobRole) {
-    this.state = {
-      ...this.state,
-      jobRoles: [...this.state.jobRoles, role],
-    };
-    this.notify();
-  }
-
-  public updateJobRole(roleId: string, updates: Partial<JobRole>) {
-    const oldRole = this.state.jobRoles.find((r) => r.id === roleId);
-    if (!oldRole) return;
-
-    const newRoles = this.state.jobRoles.map((r) => (r.id === roleId ? { ...r, ...updates } : r));
-
-    // If role code is changing, we must update all staff members using the old role code
-    let newUsers = this.state.users;
-    if (updates.code && updates.code !== oldRole.code) {
-      newUsers = this.state.users.map((u) => (u.role === oldRole.code ? { ...u, role: updates.code! } : u));
-    }
-
-    this.state = {
-      ...this.state,
-      jobRoles: newRoles,
-      users: newUsers,
-    };
-    
-    // Also sync currentUser if needed
-    if (this.state.currentUser && this.state.currentUser.role === oldRole.code && updates.code) {
-      this.state.currentUser = { ...this.state.currentUser, role: updates.code };
-    }
-
-    this.notify();
-  }
-
-  public deleteJobRole(roleId: string): { success: boolean; error?: string } {
-    const roleToDelete = this.state.jobRoles.find((r) => r.id === roleId);
-    if (!roleToDelete) return { success: false, error: 'Role not found' };
-
-    // Prevent deleting default roles
-    if (['role-admin', 'role-kitchen', 'role-scanner'].includes(roleId) || ['ADMIN', 'KITCHEN', 'SCANNER'].includes(roleToDelete.code)) {
-      return { success: false, error: 'Core system roles cannot be deleted.' };
-    }
-
-    // Check if role is in use
-    const inUse = this.state.users.some((u) => u.role === roleToDelete.code);
-    if (inUse) {
-      return { success: false, error: `This role is currently assigned to one or more staff members. Please reassign them before deleting.` };
-    }
-
-    this.state = {
-      ...this.state,
-      jobRoles: this.state.jobRoles.filter((r) => r.id !== roleId),
-    };
-    this.notify();
-    return { success: true };
   }
 
   public setSelectedRestaurant(restaurantId: string) {
@@ -370,7 +204,7 @@ class StateStore {
     this.notify();
   }
 
-  public setSelectedBookingForQR(res: Reservation | QueueToken | null) {
+  public setSelectedBookingForQR(res: Reservation | null) {
     this.state = { ...this.state, selectedBookingForQR: res };
     this.notify();
   }
@@ -483,7 +317,7 @@ class StateStore {
     };
 
     // If pre-orders exist, schedule Kitchen Ticket
-    const updatedKitchen = [...this.state.kitchenTickets];
+    let updatedKitchen = [...this.state.kitchenTickets];
     if (data.preOrderItems.length > 0 && prepStartTime) {
       const ticket: KitchenTicket = {
         ticketId: `KT-${reservationId.split('-')[2]}`,
@@ -661,7 +495,7 @@ class StateStore {
     const waitlistIndex = this.state.waitlist.findIndex(
       (w) => w.status === 'WAITING' && w.preferredDate === res.date
     );
-    const updatedWaitlist = [...this.state.waitlist];
+    let updatedWaitlist = [...this.state.waitlist];
     if (waitlistIndex !== -1) {
       updatedWaitlist[waitlistIndex] = {
         ...updatedWaitlist[waitlistIndex],
@@ -856,36 +690,9 @@ class StateStore {
       read: false,
     };
 
-    const updatedKitchen = [...this.state.kitchenTickets];
-    if (data.preOrderItems && data.preOrderItems.length > 0) {
-      const now = new Date();
-      const targetServeDate = new Date(now.getTime() + estimatedWaitMinutes * 60 * 1000);
-      const prepDuration = 15;
-      const prepStartDate = new Date(targetServeDate.getTime() - prepDuration * 60 * 1000);
-      const prepStartTime = (prepStartDate > now ? prepStartDate : now).toTimeString().substring(0, 5);
-      const targetServeTime = targetServeDate.toTimeString().substring(0, 5);
-
-      const ticket: KitchenTicket = {
-        ticketId: `KT-${tokenId}`,
-        sourceType: 'LIVE_QUEUE',
-        sourceId: tokenId,
-        customerName: data.customerName,
-        tableNumber: 'Queue',
-        items: data.preOrderItems,
-        scheduledPrepTime: prepStartTime,
-        targetServeTime: targetServeTime,
-        prepDurationMinutes: prepDuration,
-        status: 'SCHEDULED',
-        specialNotes: `Live Queue pre-order for ${data.guestCount} guests. Est. wait: ~${estimatedWaitMinutes} mins.`,
-        createdAt: new Date().toISOString(),
-      };
-      updatedKitchen.push(ticket);
-    }
-
     this.state = {
       ...this.state,
       queueTokens: [newToken, ...this.state.queueTokens],
-      kitchenTickets: updatedKitchen,
       notifications: [notif, ...this.state.notifications],
     };
 
@@ -910,16 +717,6 @@ class StateStore {
       return q;
     });
 
-    const updatedKitchen = this.state.kitchenTickets.map((kt) => {
-      if (kt.sourceType === 'LIVE_QUEUE' && kt.sourceId === tokenId) {
-        return {
-          ...kt,
-          tableNumber: assignedTableNumber || 'T-1',
-        };
-      }
-      return kt;
-    });
-
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
       title: `Table Ready for Token ${tokenId} 🔔`,
@@ -932,7 +729,6 @@ class StateStore {
     this.state = {
       ...this.state,
       queueTokens: updated,
-      kitchenTickets: updatedKitchen,
       notifications: [notif, ...this.state.notifications],
     };
 
@@ -941,7 +737,6 @@ class StateStore {
   }
 
   public seatQueueToken(tokenId: string) {
-    const token = this.state.queueTokens.find((q) => q.tokenId === tokenId);
     const updated = this.state.queueTokens.map((q) => {
       if (q.tokenId === tokenId) {
         return { ...q, status: 'SEATED' as const };
@@ -949,19 +744,7 @@ class StateStore {
       return q;
     });
 
-    const updatedKitchen = this.state.kitchenTickets.map((kt) => {
-      if (kt.sourceType === 'LIVE_QUEUE' && kt.sourceId === tokenId) {
-        return {
-          ...kt,
-          status: 'COOKING' as const,
-          startedCookingAt: new Date().toISOString(),
-          tableNumber: token?.assignedTableNumber || kt.tableNumber,
-        };
-      }
-      return kt;
-    });
-
-    this.state = { ...this.state, queueTokens: updated, kitchenTickets: updatedKitchen };
+    this.state = { ...this.state, queueTokens: updated };
     playNotificationChime('success');
     this.notify();
   }
@@ -1086,164 +869,6 @@ class StateStore {
     this.notify();
   }
 
-  public addTable(restaurantId: string, table: Table) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          tables: [...rest.tables, table],
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  public assignTableToReservation(reservationId: string, tableId: string, tableNumber: string) {
-    const updatedReservations = this.state.reservations.map((res) => {
-      if (res.reservationId === reservationId) {
-        return {
-          ...res,
-          tableId,
-          tableNumber,
-        };
-      }
-      return res;
-    });
-    this.state = { ...this.state, reservations: updatedReservations };
-    this.notify();
-  }
-
-  public deleteTable(restaurantId: string, tableId: string) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          tables: rest.tables.filter((t) => t.id !== tableId),
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  // --- Admin Menu & Offers/Schemes Modifiers ---
-  public addDailySpecial(restaurantId: string, special: DailySpecial) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          dailySpecials: [...(rest.dailySpecials || []), special],
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  public updateDailySpecial(restaurantId: string, specialId: string, updates: Partial<DailySpecial>) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          dailySpecials: (rest.dailySpecials || []).map((s) =>
-            s.id === specialId ? { ...s, ...updates } : s
-          ),
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  public deleteDailySpecial(restaurantId: string, specialId: string) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          dailySpecials: (rest.dailySpecials || []).filter((s) => s.id !== specialId),
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  public addMenuItem(restaurantId: string, item: MenuItem) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          menu: [...rest.menu, item],
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  public updateMenuItem(restaurantId: string, itemId: string, updates: Partial<MenuItem>) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          menu: rest.menu.map((m) => (m.id === itemId ? { ...m, ...updates } : m)),
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  public deleteMenuItem(restaurantId: string, itemId: string) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          menu: rest.menu.filter((m) => m.id !== itemId),
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  public addOffer(restaurantId: string, offer: Restaurant['offers'][0]) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          offers: [...(rest.offers || []), offer],
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
-  public deleteOffer(restaurantId: string, offerCode: string) {
-    const updatedRestaurants = this.state.restaurants.map((rest) => {
-      if (rest.id === restaurantId) {
-        return {
-          ...rest,
-          offers: (rest.offers || []).filter((o) => o.code !== offerCode),
-        };
-      }
-      return rest;
-    });
-    this.state = { ...this.state, restaurants: updatedRestaurants };
-    this.notify();
-  }
-
   // --- Chat Messages ---
   public addChatMessage(msg: Omit<ChatMessage, 'id' | 'timestamp'>) {
     const newMsg: ChatMessage = {
@@ -1254,6 +879,21 @@ class StateStore {
     this.state = {
       ...this.state,
       chatMessages: [...this.state.chatMessages, newMsg],
+    };
+    this.notify();
+  }
+
+  public clearChatMessages() {
+    this.state = {
+      ...this.state,
+      chatMessages: [
+        {
+          id: 'msg-welcome',
+          sender: 'assistant',
+          text: '👋 Hello! I am your Queuebite AI Assistant. I can help you reserve a table, check wait times, pre-order food, or modify your bookings. How may I assist you today?',
+          timestamp: new Date().toISOString(),
+        },
+      ],
     };
     this.notify();
   }

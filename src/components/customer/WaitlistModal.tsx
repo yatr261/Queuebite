@@ -118,7 +118,7 @@ export default function WaitlistModal({
                 Added to Waitlist!
               </h4>
               <p className="text-zinc-500">
-                We&apos;ll send a push notification with a 1-click claim link as soon as a table is released.
+                We'll send a push notification with a 1-click claim link as soon as a table is released.
               </p>
               <button
                 onClick={onClose}

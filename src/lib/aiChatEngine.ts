@@ -1,49 +1,165 @@
 import { store } from './store';
 import { getTodayDateString, getTomorrowDateString } from './utils';
 import { findSmartTableAllocation } from './aiAllocation';
-import { TableSection, ActionCardData } from './types';
+import { TableSection } from './types';
 
 export interface AIResponse {
   text: string;
   actionCard?: {
-    type: 'BOOKING_PROPOSAL' | 'ALTERNATIVE_SLOTS' | 'PRE_ORDER_PROMPT' | 'BOOKING_SUMMARY' | 'QUEUE_TOKEN' | 'MENU_RECOMMENDATION';
-    data: ActionCardData;
+    type:
+      | 'BOOKING_PROPOSAL'
+      | 'ALTERNATIVE_SLOTS'
+      | 'PRE_ORDER_PROMPT'
+      | 'BOOKING_SUMMARY'
+      | 'QUEUE_TOKEN'
+      | 'MENU_RECOMMENDATION'
+      | 'LOCATION_INFO'
+      | 'OFFERS_INFO';
+    data: any;
   };
 }
 
 export function processUserChatMessage(userQuery: string): AIResponse {
-  const q = userQuery.toLowerCase().trim();
+  const rawQ = userQuery.trim();
+  const q = rawQ.toLowerCase();
   const state = store.getState();
-  const restaurant = state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
+  const restaurant =
+    state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
 
-  // 1. Cancellation intent
-  if (q.includes('cancel') && (q.includes('booking') || q.includes('reservation') || q.includes('table') || q.includes('qb-'))) {
-    const matchedRes = state.reservations.find(
-      (r) =>
-        r.bookingStatus === 'CONFIRMED' ||
-        r.bookingStatus === 'CHECKED_IN' ||
-        (r.bookingStatus !== 'CANCELLED' && q.includes(r.reservationId.toLowerCase()))
-    );
+  // 0. Greetings & Friendly Small Talk
+  if (
+    q === 'hi' ||
+    q === 'hello' ||
+    q === 'hey' ||
+    q === 'namaste' ||
+    q === 'kaise ho' ||
+    q === 'help' ||
+    q === 'kya kar sakte ho' ||
+    q.startsWith('hi ') ||
+    q.startsWith('hello ')
+  ) {
+    return {
+      text: `👋 **Namaste! Welcome to ${restaurant.name} AI Assistant!**\n\nI can seamlessly assist you in **English** or **Hinglish** with:\n\n• 🍽️ **Table Booking:** *"Book a table for 4 tomorrow at 8 PM"* or *"4 log ke liye table book karo"*\n• 🎟️ **Live Walk-in Queue:** *"What is the current wait time?"* or *"Queue check karo"*\n• 🍕 **Chef Recommendations:** *"Suggest top vegetarian dishes"*\n• 🏷️ **Discounts & Offers:** *"Any active promo codes?"*\n• 📍 **Location & Hours:** *"Where is the restaurant located?"*\n• ❌ **Manage Bookings:** *"Cancel my booking QB-2026-1048"*`,
+    };
+  }
+
+  // 1. Cancellation intent (English & Hinglish)
+  const isCancelIntent =
+    q.includes('cancel') ||
+    q.includes('radd') ||
+    q.includes('hatao') ||
+    q.includes('delete booking');
+
+  if (
+    isCancelIntent &&
+    (q.includes('booking') ||
+      q.includes('reservation') ||
+      q.includes('table') ||
+      q.includes('qb-') ||
+      q.includes('mera') ||
+      q.includes('karo'))
+  ) {
+    // Try matching specific booking ID e.g. QB-2026-1048
+    const idMatch = rawQ.match(/QB-\d{4}-\d+/i);
+    let matchedRes = idMatch
+      ? state.reservations.find(
+          (r) => r.reservationId.toLowerCase() === idMatch[0].toLowerCase()
+        )
+      : null;
+
+    if (!matchedRes) {
+      // Find latest confirmed booking
+      matchedRes = state.reservations.find(
+        (r) => r.bookingStatus === 'CONFIRMED' || r.bookingStatus === 'CHECKED_IN'
+      ) || null;
+    }
 
     if (matchedRes) {
-      store.cancelReservation(matchedRes.reservationId, 'Cancelled via AI Chat Assistant');
+      store.cancelReservation(matchedRes.reservationId, 'Cancelled via AI Chatbot Assistant');
       return {
-        text: `Your reservation **${matchedRes.reservationId}** for ${matchedRes.guestCount} guests on ${matchedRes.date} at ${matchedRes.startTime} has been **cancelled**. ${matchedRes.depositAmount > 0 ? 'Your ₹' + matchedRes.depositAmount + ' deposit refund has been processed.' : 'Your table has been released.'}`,
+        text: `✅ Your reservation **${matchedRes.reservationId}** for **${matchedRes.guestCount} guests** on **${matchedRes.date}** at **${matchedRes.startTime}** has been **CANCELLED**.\n\n${
+          matchedRes.depositAmount > 0
+            ? '💰 Refund of ₹' + matchedRes.depositAmount + ' has been initiated.'
+            : 'Your reserved table has been released.'
+        }`,
       };
     } else {
       return {
-        text: "I couldn't find an active reservation to cancel. Please check your Booking ID or view your bookings in 'My Bookings'.",
+        text: `⚠️ I couldn't find an active reservation to cancel. Please double-check your Booking ID (e.g. QB-2026-1048) or check the 'My Bookings' tab.`,
       };
     }
   }
 
-  // 2. Queue Status intent
-  if (q.includes('queue') || q.includes('wait time') || q.includes('waiting time') || q.includes('token') || q.includes('walk in')) {
+  // 2. Location, Hours, & Contact info intent
+  if (
+    q.includes('location') ||
+    q.includes('address') ||
+    q.includes('kahan') ||
+    q.includes('where is') ||
+    q.includes('timing') ||
+    q.includes('open') ||
+    q.includes('hours') ||
+    q.includes('phone') ||
+    q.includes('contact') ||
+    q.includes('direction')
+  ) {
+    return {
+      text: `📍 **${restaurant.name}**\n\n• **Address:** ${restaurant.address}\n• **Opening Hours:** ${restaurant.openingTime} - ${restaurant.closingTime} (Daily)\n• **Phone:** ${restaurant.phone}\n• **Cuisines:** ${restaurant.cuisines.join(', ')}\n• **Rating:** ⭐ ${restaurant.rating} (${restaurant.reviewCount} reviews)`,
+      actionCard: {
+        type: 'LOCATION_INFO',
+        data: {
+          name: restaurant.name,
+          address: restaurant.address,
+          phone: restaurant.phone,
+          openingTime: restaurant.openingTime,
+          closingTime: restaurant.closingTime,
+          rating: restaurant.rating,
+        },
+      },
+    };
+  }
+
+  // 3. Offers & Discounts intent
+  if (
+    q.includes('offer') ||
+    q.includes('discount') ||
+    q.includes('coupon') ||
+    q.includes('code') ||
+    q.includes('promo') ||
+    q.includes('sasta') ||
+    q.includes('deal')
+  ) {
+    return {
+      text: `🏷️ **Active AI Pre-Booking Offers at ${restaurant.name}:**\n\n• **PREORDER10**: Get **10% OFF** when you pre-order dishes during table reservation.\n• **FEAST100**: **Flat ₹100 OFF** on pre-orders above ₹799.\n• **FREEBEV**: Free complimentary beverage on bill above ₹600!`,
+      actionCard: {
+        type: 'OFFERS_INFO',
+        data: {
+          offers: restaurant.offers || [
+            { code: 'PREORDER10', title: '10% OFF Pre-Orders', description: 'Save 10% on pre-ordered meals' },
+            { code: 'FEAST100', title: '₹100 Flat Discount', description: 'On orders above ₹799' },
+          ],
+        },
+      },
+    };
+  }
+
+  // 4. Live Queue Status / Wait time intent
+  if (
+    q.includes('queue') ||
+    q.includes('wait time') ||
+    q.includes('waiting time') ||
+    q.includes('token') ||
+    q.includes('walk in') ||
+    q.includes('kitna time') ||
+    q.includes('kitni waiting') ||
+    q.includes('line') ||
+    q.includes('kitna der')
+  ) {
     const waitingTokens = state.queueTokens.filter((t) => t.status === 'WAITING');
     const waitTime = Math.max(5, (waitingTokens.length + 1) * 8);
 
     return {
-      text: `Right now at **${restaurant.name}**, there are **${waitingTokens.length} groups waiting** in the live walk-in queue. The estimated waiting time is approximately **${waitTime} minutes**.`,
+      text: `🎟️ **Live Walk-in Queue Update at ${restaurant.name}:**\n\n• **Waiting Groups:** ${waitingTokens.length} in line\n• **Estimated Wait:** ~${waitTime} minutes\n\nWould you like to generate a live walk-in queue token right now?`,
       actionCard: {
         type: 'QUEUE_TOKEN',
         data: {
@@ -55,76 +171,140 @@ export function processUserChatMessage(userQuery: string): AIResponse {
     };
   }
 
-  // 3. Menu / Food Recommendation intent
-  if (q.includes('recommend') || q.includes('menu') || q.includes('veg') || q.includes('special') || q.includes('popular') || q.includes('food')) {
+  // 5. Menu / Food Recommendation intent
+  if (
+    q.includes('recommend') ||
+    q.includes('menu') ||
+    q.includes('veg') ||
+    q.includes('food') ||
+    q.includes('dish') ||
+    q.includes('khaana') ||
+    q.includes('special') ||
+    q.includes('popular') ||
+    q.includes('starter') ||
+    q.includes('dosa') ||
+    q.includes('paneer')
+  ) {
     const popularItems = restaurant.menu.filter((m) => m.isPopular);
     return {
-      text: `Here are our chef's top recommended dishes at **${restaurant.name}**! Pre-ordering during booking saves you 10% and ensures your food is fresh and piping hot upon arrival.`,
+      text: `🍽️ **Chef's Special Recommendations at ${restaurant.name}:**\n\nPre-ordering dishes when reserving your table saves you **10% OFF** and guarantees immediate service upon arrival!`,
       actionCard: {
         type: 'MENU_RECOMMENDATION',
         data: {
-          items: popularItems.slice(0, 4),
+          items: popularItems.length > 0 ? popularItems.slice(0, 4) : restaurant.menu.slice(0, 4),
         },
       },
     };
   }
 
-  // 4. Booking intent
+  // 6. Booking / Reservation intent (English & Hinglish)
   const isBookingQuery =
     q.includes('book') ||
     q.includes('reserve') ||
     q.includes('table for') ||
     q.includes('table at') ||
     q.includes('have a table') ||
-    q.includes('reservation');
+    q.includes('reservation') ||
+    q.includes('table chahiye') ||
+    q.includes('seat chahiye') ||
+    q.includes('table book') ||
+    q.includes('seat book');
 
-  if (isBookingQuery || q.includes('people') || q.includes('guests') || q.includes('pm') || q.includes('am')) {
-    // Extract Guests
+  const containsGuests =
+    q.includes('people') ||
+    q.includes('person') ||
+    q.includes('guests') ||
+    q.includes('persons') ||
+    q.includes('pax') ||
+    q.includes('seats') ||
+    q.includes('log') ||
+    q.includes('logon') ||
+    q.includes('bande');
+
+  const containsTime =
+    q.includes('pm') ||
+    q.includes('am') ||
+    q.includes('baje') ||
+    q.includes('clock') ||
+    q.includes('o\'clock') ||
+    q.includes('tonight') ||
+    q.includes('evening') ||
+    q.includes('lunch') ||
+    q.includes('dinner');
+
+  if (isBookingQuery || containsGuests || containsTime) {
+    // --- Guest Count Extraction ---
     let guestCount = 2; // default
-    const guestMatch = q.match(/(\d+)\s*(people|person|guests|persons|pax|seats)/) || q.match(/for\s*(\d+)/);
+    const guestMatch =
+      q.match(/(\d+)\s*(people|person|guests|persons|pax|seats|log|logon|bande)/i) ||
+      q.match(/for\s*(\d+)/i) ||
+      q.match(/(\d+)\s*log/i);
+
     if (guestMatch) {
       guestCount = parseInt(guestMatch[1], 10);
-    } else if (q.includes('couple') || q.includes('two of us')) {
+    } else if (q.includes('couple') || q.includes('do log') || q.includes('two of us') || q.includes('2 log')) {
       guestCount = 2;
-    } else if (q.includes('family') || q.includes('four of us')) {
+    } else if (q.includes('family') || q.includes('char log') || q.includes('chaar log') || q.includes('four of us') || q.includes('4 log')) {
       guestCount = 4;
     }
 
-    // Extract Date
+    // --- Date Extraction ---
     let date = getTodayDateString();
-    if (q.includes('tomorrow')) {
+    if (q.includes('tomorrow') || q.includes('kal')) {
       date = getTomorrowDateString();
     } else if (q.includes('sunday') || q.includes('saturday') || q.includes('friday')) {
       date = getTomorrowDateString();
     }
 
-    // Extract Time
+    // --- Time Extraction ---
     let timeSlot = '19:30'; // default dinner
-    const timeMatch = q.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
-    if (timeMatch) {
-      let hours = parseInt(timeMatch[1], 10);
-      const minutes = timeMatch[2] ? timeMatch[2] : '00';
-      const period = timeMatch[3];
+    const timeDigitMatch = q.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|baje)?/i);
+
+    if (timeDigitMatch) {
+      let hours = parseInt(timeDigitMatch[1], 10);
+      const minutes = timeDigitMatch[2] ? timeDigitMatch[2] : '00';
+      const period = (timeDigitMatch[3] || '').toLowerCase();
+
       if (period === 'pm' && hours < 12) hours += 12;
       if (period === 'am' && hours === 12) hours = 0;
-      timeSlot = `${hours.toString().padStart(2, '0')}:${minutes}`;
-    } else if (q.includes('lunch') || q.includes('afternoon') || q.includes('noon')) {
+
+      // Smart handling for "8 baje" or "8" without explicit am/pm
+      if (!period || period === 'baje') {
+        if (hours >= 1 && hours <= 6) hours += 12; // 1 to 6 baje -> 13:00 to 18:00
+        else if (hours >= 7 && hours <= 11) {
+          if (q.includes('subah') || q.includes('morning')) hours = hours;
+          else hours += 12; // 7 to 11 baje -> 19:00 to 23:00
+        }
+      }
+
+      if (hours >= 0 && hours <= 23) {
+        timeSlot = `${hours.toString().padStart(2, '0')}:${minutes}`;
+      }
+    } else if (q.includes('lunch') || q.includes('dopahar')) {
       timeSlot = '13:00';
-    } else if (q.includes('dinner') || q.includes('tonight') || q.includes('evening')) {
+    } else if (q.includes('dinner') || q.includes('tonight') || q.includes('raat') || q.includes('shaam')) {
       timeSlot = '19:30';
     }
 
-    // Extract Preference
+    // --- Table Preference Extraction ---
     let preference: TableSection = 'ANY';
-    if (q.includes('window')) preference = 'WINDOW';
-    else if (q.includes('outdoor') || q.includes('garden') || q.includes('patio') || q.includes('terrace')) preference = 'OUTDOOR';
-    else if (q.includes('ac') || q.includes('air condition')) preference = 'AC_SECTION';
-    else if (q.includes('vip') || q.includes('lounge')) preference = 'VIP_LOUNGE';
+    if (q.includes('window') || q.includes('khidki')) preference = 'WINDOW';
+    else if (
+      q.includes('outdoor') ||
+      q.includes('garden') ||
+      q.includes('patio') ||
+      q.includes('terrace') ||
+      q.includes('baahar') ||
+      q.includes('open air')
+    )
+      preference = 'OUTDOOR';
+    else if (q.includes('ac') || q.includes('air condition') || q.includes('thanda')) preference = 'AC_SECTION';
+    else if (q.includes('vip') || q.includes('lounge') || q.includes('private')) preference = 'VIP_LOUNGE';
     else if (q.includes('couple')) preference = 'COUPLE';
     else if (q.includes('family')) preference = 'FAMILY';
-    else if (q.includes('indoor')) preference = 'INDOOR';
+    else if (q.includes('indoor') || q.includes('andar')) preference = 'INDOOR';
 
-    // AI Check Allocation
+    // AI Smart Table Allocation calculation
     const allocation = findSmartTableAllocation({
       restaurant,
       date,
@@ -136,9 +316,8 @@ export function processUserChatMessage(userQuery: string): AIResponse {
 
     if (allocation.isAvailable && allocation.assignedTable) {
       const assigned = allocation.assignedTable;
-      const prefText = preference !== 'ANY' ? preference.toLowerCase() : 'indoor/outdoor';
       return {
-        text: `✨ **Table Available!** I found **${assigned.tableNumber}** (${assigned.capacity}-seater, ${assigned.sectionName}) for **${guestCount} guests** on **${date}** at **${timeSlot}**.\n\n${allocation.aiExplanation}`,
+        text: `✨ **Table Reserved & Allocated!**\n\nI have locked Table **${assigned.tableNumber}** (${assigned.capacity}-seater, ${assigned.sectionName}) at **${restaurant.name}** for **${guestCount} guests** on **${date}** at **${timeSlot}**.\n\n🤖 *AI Engine Rationale:* ${allocation.aiExplanation}`,
         actionCard: {
           type: 'BOOKING_PROPOSAL',
           data: {
@@ -154,7 +333,7 @@ export function processUserChatMessage(userQuery: string): AIResponse {
       };
     } else {
       return {
-        text: `⚠️ ${allocation.aiExplanation}\n\nWould you like to book one of the alternative time slots or join the smart waitlist?`,
+        text: `⚠️ **Time Slot Unavailable**\n\n${allocation.aiExplanation}\n\nHere are the closest available alternative slots calculated by AI for ${guestCount} guests:`,
         actionCard: {
           type: 'ALTERNATIVE_SLOTS',
           data: {
@@ -168,8 +347,8 @@ export function processUserChatMessage(userQuery: string): AIResponse {
     }
   }
 
-  // 5. Default natural fallback
+  // 7. Intelligent Default Fallback with Quick Suggestions
   return {
-    text: `I'm here to help! You can try asking:\n- *"Book a table for 4 tomorrow at 8 PM"*\n- *"Do you have an outdoor table for 2 at 7:30 PM?"*\n- *"What is the live queue wait time right now?"*\n- *"Recommend best vegetarian dishes"*\n- *"Cancel my booking QB-2026-1048"*`,
+    text: `I'm here to help! You can ask me anything in English or Hinglish like:\n\n• *"Book a table for 4 tomorrow at 8 PM"*\n• *"4 log ke liye aaj shaam 8 baje table"* \n• *"What is the live queue wait time?"*\n• *"Recommend best vegetarian starters"*\n• *"What discount coupons are available?"*\n• *"Cancel my booking QB-2026-1048"*`,
   };
 }

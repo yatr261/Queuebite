@@ -40,12 +40,6 @@ export interface MenuItem {
   calories?: number;
 }
 
-export interface DailySpecial extends MenuItem {
-  date: string; // "YYYY-MM-DD"
-  menuItemId?: string; // Reference to existing menu item, if any
-  discountNote?: string; // e.g. "Buy 1 Get 1 Free" or "20% Off today only"
-}
-
 export interface PreOrderItem {
   item: MenuItem;
   quantity: number;
@@ -163,7 +157,6 @@ export interface Restaurant {
   depositAmount: number; // 200
   tables: Table[];
   menu: MenuItem[];
-  dailySpecials?: DailySpecial[];
   currentOccupancy: number; // percentage e.g. 75
   totalTables: number;
   availableTables: number;
@@ -176,7 +169,6 @@ export interface Restaurant {
     discountFlat?: number;
     minOrder?: number;
   }[];
-  acceptedPaymentMethods?: ('UPI' | 'CARD' | 'NETBANKING' | 'CASH_AT_DESK')[];
 }
 
 export interface NotificationItem {
@@ -189,49 +181,23 @@ export interface NotificationItem {
   bookingId?: string;
 }
 
-export interface ActionCardData {
-  restaurantId?: string;
-  restaurantName?: string;
-  date?: string;
-  timeSlot?: string;
-  guestCount?: number;
-  preference?: TableSection;
-  items?: MenuItem[];
-  alternativeSlots?: string[];
-  alternativeTimeSlots?: string[];
-  token?: QueueToken;
-  booking?: Reservation;
-  assignedTable?: Table;
-  estimatedWaitMinutes?: number;
-  waitingCount?: number;
-}
-
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant' | 'system';
   text: string;
   timestamp: string;
   actionCard?: {
-    type: 'BOOKING_PROPOSAL' | 'ALTERNATIVE_SLOTS' | 'PRE_ORDER_PROMPT' | 'BOOKING_SUMMARY' | 'QUEUE_TOKEN' | 'MENU_RECOMMENDATION';
-    data: ActionCardData;
+    type:
+      | 'BOOKING_PROPOSAL'
+      | 'ALTERNATIVE_SLOTS'
+      | 'PRE_ORDER_PROMPT'
+      | 'BOOKING_SUMMARY'
+      | 'QUEUE_TOKEN'
+      | 'MENU_RECOMMENDATION'
+      | 'LOCATION_INFO'
+      | 'OFFERS_INFO';
+    data: any;
   };
 }
 
 export type AppViewRole = 'CUSTOMER' | 'ADMIN' | 'KITCHEN' | 'SCANNER';
-
-export interface JobRole {
-  id: string;
-  name: string;
-  code: string; // e.g. "ADMIN", "KITCHEN", "SCANNER", "MANAGER", "WAITER"
-  description: string;
-  permissions: ('DASHBOARD' | 'KITCHEN' | 'SCANNER' | 'STAFF_MANAGEMENT')[];
-  createdAt: string;
-}
-
-export interface PortalUser {
-  id: string;
-  name: string;
-  email: string;
-  passwordHash: string;
-  role: string; // References JobRole.code
-}

@@ -23,13 +23,13 @@ export function ModifyBookingModal({
   booking: Reservation | null;
   onClose: () => void;
 }) {
-  const [date, setDate] = useState<string>(booking?.date || '');
-  const [timeSlot, setTimeSlot] = useState<string>(booking?.startTime || '');
-  const [guestCount, setGuestCount] = useState<number>(booking?.guestCount || 1);
-  const [tablePreference, setTablePreference] = useState<TableSection>(booking?.tablePreference || 'ANY');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
   if (!booking) return null;
+
+  const [date, setDate] = useState<string>(booking.date);
+  const [timeSlot, setTimeSlot] = useState<string>(booking.startTime);
+  const [guestCount, setGuestCount] = useState<number>(booking.guestCount);
+  const [tablePreference, setTablePreference] = useState<TableSection>(booking.tablePreference);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const slots = ['12:00', '12:30', '13:00', '13:30', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00'];
 
@@ -173,9 +173,9 @@ export function CancelBookingModal({
   booking: Reservation | null;
   onClose: () => void;
 }) {
-  const [reason, setReason] = useState<string>('Change of plans');
-
   if (!booking) return null;
+
+  const [reason, setReason] = useState<string>('Change of plans');
 
   const handleCancel = () => {
     store.cancelReservation(booking.reservationId, reason);

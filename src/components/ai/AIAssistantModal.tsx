@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { store, AppState } from '@/lib/store';
 import { processUserChatMessage } from '@/lib/aiChatEngine';
-import { MenuItem, TableSection, ActionCardData } from '@/lib/types';
 import { formatDate, formatTime12h, formatCurrency } from '@/lib/utils';
 import {
   Bot,
@@ -14,15 +13,28 @@ import {
   Clock,
   Ticket,
   UtensilsCrossed,
-  ArrowRight,
-  RefreshCw,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Trash2,
+  MapPin,
+  Tag,
+  Phone,
+  MessageSquare,
+  ChevronRight,
+  Zap,
 } from 'lucide-react';
 
 export default function AIAssistantModal() {
   const [state, setState] = useState<AppState>(store.getState());
   const [input, setInput] = useState<string>('');
   const [isTyping, setIsTyping] = useState<boolean>(false);
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [ttsEnabled, setTtsEnabled] = useState<boolean>(false);
+  const [activeCategory, setActiveCategory] = useState<string>('All');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     return store.subscribe(() => {
@@ -34,14 +46,61 @@ export default function AIAssistantModal() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [state.chatMessages, isTyping]);
 
-  if (!state.isAiChatOpen) return null;
+  // Speech Recognition Setup (Web Speech API)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const rec = new SpeechRecognition();
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.lang = 'en-IN'; // Works great for English & Hinglish accents
 
-  const quickPrompts = [
-    'Book a table for 4 tomorrow at 8 PM',
-    'Do you have an outdoor table for 2 at 7:30 PM?',
-    'What is the live wait time right now?',
-    'Recommend best vegetarian dishes',
-  ];
+        rec.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setInput(transcript);
+          setIsListening(false);
+        };
+
+        rec.onerror = () => {
+          setIsListening(false);
+        };
+
+        rec.onend = () => {
+          setIsListening(false);
+        };
+
+        recognitionRef.current = rec;
+      }
+    }
+  }, []);
+
+  const toggleVoiceInput = () => {
+    if (!recognitionRef.current) {
+      alert('Voice recognition is not supported in this browser environment.');
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      recognitionRef.current.start();
+    }
+  };
+
+  const speakText = (text: string) => {
+    if (!ttsEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    // Strip markdown formatting for speech
+    const cleanText = text.replace(/[*_~`#•]/g, '').replace(/\[(.*?)\]\(.*?\)/g, '$1');
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handleSendMessage = (textToSend?: string) => {
     const query = textToSend || input;
@@ -63,103 +122,239 @@ export default function AIAssistantModal() {
         actionCard: response.actionCard,
       });
       setIsTyping(false);
-    }, 450);
+      speakText(response.text);
+    }, 400);
   };
 
-  const handleQuickConfirmBooking = (cardData: ActionCardData) => {
+  const handleQuickConfirmBooking = (cardData: any) => {
     const res = store.createReservation({
-      restaurantId: cardData.restaurantId || '',
+      restaurantId: cardData.restaurantId,
       customerName: 'Rahul Sharma',
       customerPhone: '+91 98765 43210',
-      date: cardData.date || '',
-      startTime: cardData.timeSlot || '',
-      guestCount: cardData.guestCount || 1,
-      tablePreference: cardData.preference || 'ANY',
+      date: cardData.date,
+      startTime: cardData.timeSlot,
+      guestCount: cardData.guestCount,
+      tablePreference: cardData.preference,
       preOrderItems: [],
     });
 
     if (res.success && res.reservation) {
+      const confirmationMsg = `🎉 **Booking Confirmed!**\n\nYour table **${res.reservation.tableNumber}** at **${cardData.restaurantName}** has been locked.\n\n• **Booking ID:** \`${res.reservation.reservationId}\`\n• **Date & Time:** ${formatDate(res.reservation.date)} at ${formatTime12h(res.reservation.startTime)}\n• **Guests:** ${res.reservation.guestCount}\n\nYou can access your QR Digital Pass anytime in 'My Bookings'.`;
       store.addChatMessage({
         sender: 'assistant',
-        text: `🎉 **Booking Confirmed!** Your table **${res.reservation.tableNumber}** has been reserved with Booking ID: **${res.reservation.reservationId}**. You can view your pass in 'My Bookings'.`,
+        text: confirmationMsg,
       });
+      speakText(`Your table booking is confirmed with ID ${res.reservation.reservationId}`);
     }
   };
 
+  const promptCategories = [
+    { name: 'All', icon: Zap },
+    { name: 'Booking', icon: UtensilsCrossed },
+    { name: 'Queue', icon: Ticket },
+    { name: 'Menu', icon: Sparkles },
+    { name: 'Offers', icon: Tag },
+  ];
+
+  const quickPrompts: Record<string, string[]> = {
+    All: [
+      'Book a table for 4 tomorrow at 8 PM',
+      '4 log ke liye aaj shaam 8 baje table',
+      'What is the live wait time right now?',
+      'Recommend top vegetarian starters',
+      'Any active discount coupons?',
+    ],
+    Booking: [
+      'Book an outdoor table for 2 at 7:30 PM',
+      'Do you have a window table for lunch?',
+      '4 guests table for Sunday dinner',
+      'Reserve a VIP lounge table for 6',
+    ],
+    Queue: [
+      'What is the current walk-in queue wait time?',
+      'Kitni waiting hai abhi?',
+      'Generate a live queue token for 3 guests',
+    ],
+    Menu: [
+      'Recommend chef special dishes',
+      'What are the best vegetarian options?',
+      'Show popular starters with prices',
+    ],
+    Offers: [
+      'Show available discount coupons',
+      'How to get 10% off on pre-orders?',
+      'What is the promo code for free beverage?',
+    ],
+  };
+
+  // Render text with basic markdown styling (bold, linebreaks)
+  const renderFormattedText = (text: string) => {
+    return text.split('\n').map((line, idx) => {
+      // Process bold syntax **text**
+      const parts = line.split(/(\*\*.*?\*\*|\`.*?\`)/g);
+      return (
+        <span key={idx} className="block min-h-[1.25em]">
+          {parts.map((part, pIdx) => {
+            if (part.startsWith('**') && part.endsWith('**')) {
+              return (
+                <strong key={pIdx} className="font-bold text-amber-600 dark:text-amber-400">
+                  {part.slice(2, -2)}
+                </strong>
+              );
+            }
+            if (part.startsWith('`') && part.endsWith('`')) {
+              return (
+                <code key={pIdx} className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 font-mono text-[11px]">
+                  {part.slice(1, -1)}
+                </code>
+              );
+            }
+            return part;
+          })}
+        </span>
+      );
+    });
+  };
+
+  // FLOATING LAUNCHER BUTTON (When Chat is Minimized)
+  if (!state.isAiChatOpen) {
+    return (
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+        {/* Tooltip Badge */}
+        <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-zinc-900/90 text-white text-xs font-semibold shadow-xl border border-zinc-800 backdrop-blur-md animate-in fade-in slide-in-from-right-4 duration-300">
+          <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+          <span>Ask AI to book a table!</span>
+        </div>
+
+        {/* Floating Action Button */}
+        <button
+          onClick={() => store.setAiChatOpen(true)}
+          className="relative group p-4 rounded-full bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 text-white shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 border-2 border-white/20"
+          title="Open AI Concierge Chatbot"
+        >
+          <Bot className="w-6 h-6 text-white group-hover:rotate-12 transition-transform" />
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-white dark:border-zinc-900 animate-ping" />
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-white dark:border-zinc-900" />
+        </button>
+      </div>
+    );
+  }
+
+  // EXPANDED CHATBOT MODAL WINDOW
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden flex flex-col h-[560px] animate-in slide-in-from-bottom-5 duration-300">
+    <div className="fixed bottom-4 right-4 z-50 w-full max-w-md sm:max-w-lg bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden flex flex-col h-[590px] max-h-[85vh] animate-in slide-in-from-bottom-5 duration-300">
       {/* Chat Header */}
       <div className="p-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center">
-            <Bot className="w-5 h-5" />
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner">
+            <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <h3 className="text-sm font-extrabold">Queuebite AI Assistant</h3>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-extrabold tracking-tight">Queuebite AI Chatbot</h3>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 text-[9px] font-bold uppercase tracking-wider border border-emerald-400/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live NLP
+              </span>
             </div>
-            <p className="text-[10px] text-zinc-100">Natural Language Booking & Concierge</p>
+            <p className="text-[10px] text-amber-100">English & Hinglish Smart Concierge</p>
           </div>
         </div>
 
-        <button
-          onClick={() => store.setAiChatOpen(false)}
-          className="p-1 rounded-lg hover:bg-black/20 text-white transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Action Controls */}
+        <div className="flex items-center gap-1">
+          {/* TTS Speaker Toggle */}
+          <button
+            onClick={() => setTtsEnabled(!ttsEnabled)}
+            className={`p-1.5 rounded-xl transition-colors ${
+              ttsEnabled ? 'bg-white/30 text-white' : 'hover:bg-black/20 text-white/80'
+            }`}
+            title={ttsEnabled ? 'Disable Voice Playback' : 'Enable Voice Playback'}
+          >
+            {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          {/* Clear History */}
+          <button
+            onClick={() => store.clearChatMessages()}
+            className="p-1.5 rounded-xl hover:bg-black/20 text-white/80 transition-colors"
+            title="Clear Chat History"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+
+          {/* Close Button */}
+          <button
+            onClick={() => store.setAiChatOpen(false)}
+            className="p-1.5 rounded-xl hover:bg-black/20 text-white transition-colors"
+            title="Minimize Chat"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
-      {/* Messages List */}
-      <div className="p-4 overflow-y-auto flex-1 space-y-3.5 bg-zinc-50/50 dark:bg-zinc-950/50 text-xs">
+      {/* Messages Scroll View */}
+      <div className="p-4 overflow-y-auto flex-1 space-y-4 bg-zinc-50/60 dark:bg-zinc-950/60 text-xs">
         {state.chatMessages.map((msg) => (
           <div
             key={msg.id}
             className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
           >
             <div
-              className={`max-w-[88%] p-3.5 rounded-2xl leading-relaxed whitespace-pre-line ${
+              className={`max-w-[88%] p-3.5 rounded-2xl leading-relaxed shadow-sm ${
                 msg.sender === 'user'
-                  ? 'bg-amber-500 text-white rounded-br-none shadow-sm'
-                  : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-none shadow-sm'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-br-none'
+                  : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 text-zinc-800 dark:text-zinc-100 rounded-bl-none'
               }`}
             >
-              {msg.text}
+              {renderFormattedText(msg.text)}
             </div>
 
-            {/* In-Chat Action Cards */}
+            {/* Interactive Action Cards */}
             {msg.actionCard && (
               <div className="w-full max-w-[90%] mt-2 space-y-2">
                 {/* 1. Booking Proposal Card */}
                 {msg.actionCard.type === 'BOOKING_PROPOSAL' && (
-                  <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/50 space-y-2 text-xs">
-                    <div className="flex justify-between font-bold text-amber-900 dark:text-amber-300">
-                      <span>Table {msg.actionCard.data.assignedTable?.tableNumber || ''}</span>
-                      <span>{formatTime12h(msg.actionCard.data.timeSlot || '')}</span>
+                  <div className="p-3.5 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 space-y-2.5 text-xs shadow-sm">
+                    <div className="flex justify-between items-center font-extrabold text-amber-900 dark:text-amber-300">
+                      <span className="flex items-center gap-1.5">
+                        <UtensilsCrossed className="w-3.5 h-3.5 text-amber-600" />
+                        Table {msg.actionCard.data.assignedTable.tableNumber} ({msg.actionCard.data.assignedTable.sectionName})
+                      </span>
+                      <span className="px-2 py-0.5 rounded-lg bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-mono text-[11px]">
+                        {formatTime12h(msg.actionCard.data.timeSlot)}
+                      </span>
                     </div>
-                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                      {msg.actionCard.data.guestCount || 0} Guests • {formatDate(msg.actionCard.data.date || '')} • {msg.actionCard.data.assignedTable?.sectionName || ''}
+
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                      📅 {formatDate(msg.actionCard.data.date)} • 👥 {msg.actionCard.data.guestCount} Guests • 📍 {msg.actionCard.data.restaurantName}
                     </p>
+
                     <button
                       onClick={() => handleQuickConfirmBooking(msg.actionCard!.data)}
-                      className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5"
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-1.5 transition-transform active:scale-98"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> 1-Click Confirm Reservation
+                      <CheckCircle2 className="w-4 h-4" /> 1-Click Confirm Reservation
                     </button>
                   </div>
                 )}
 
                 {/* 2. Alternative Slots Card */}
                 {msg.actionCard.type === 'ALTERNATIVE_SLOTS' && (
-                  <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 space-y-1.5 text-xs">
-                    <p className="font-bold text-zinc-700 dark:text-zinc-300">Recommended Alternative Times:</p>
+                  <div className="p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 space-y-2 text-xs">
+                    <p className="font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-500" /> Choose Alternative Time:
+                    </p>
                     <div className="flex flex-wrap gap-1.5">
-                      {(msg.actionCard.data.alternativeSlots || []).map((slot: string) => (
+                      {msg.actionCard.data.alternativeSlots.map((slot: string) => (
                         <button
                           key={slot}
-                          onClick={() => handleSendMessage(`Book a table for ${msg.actionCard!.data.guestCount} at ${slot}`)}
-                          className="px-2.5 py-1 rounded-lg bg-amber-500 text-white font-bold text-xs hover:bg-amber-600"
+                          onClick={() =>
+                            handleSendMessage(
+                              `Book a table for ${msg.actionCard!.data.guestCount} at ${slot}`
+                            )
+                          }
+                          className="px-3 py-1.5 rounded-xl bg-amber-500 text-white font-bold text-xs hover:bg-amber-600 transition-colors shadow-sm"
                         >
                           {formatTime12h(slot)}
                         </button>
@@ -172,35 +367,74 @@ export default function AIAssistantModal() {
                 {msg.actionCard.type === 'MENU_RECOMMENDATION' && (
                   <div className="p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 space-y-2">
                     <div className="grid grid-cols-2 gap-2">
-                      {(msg.actionCard.data.items || []).map((item: MenuItem) => (
-                        <div key={item.id} className="p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[11px]">
-                          <p className="font-bold truncate">{item.name}</p>
-                          <p className="text-amber-600 font-extrabold">{formatCurrency(item.price)}</p>
+                      {msg.actionCard.data.items.map((item: any) => (
+                        <div
+                          key={item.id}
+                          className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[11px] space-y-1"
+                        >
+                          <p className="font-bold truncate text-zinc-900 dark:text-zinc-100">{item.name}</p>
+                          <p className="text-amber-600 dark:text-amber-400 font-extrabold">{formatCurrency(item.price)}</p>
+                          <p className="text-[9px] text-zinc-400">{item.dietary} • Prep: {item.prepTimeMinutes} mins</p>
                         </div>
                       ))}
                     </div>
                     <button
                       onClick={() => store.setActiveBookingModal(true)}
-                      className="w-full py-1.5 rounded-xl bg-amber-500 text-white font-bold text-xs"
+                      className="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center justify-center gap-1 transition-colors"
                     >
-                      Pre-Order in Booking Modal →
+                      Pre-Order in Booking Wizard <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
 
                 {/* 4. Queue Token Card */}
                 {msg.actionCard.type === 'QUEUE_TOKEN' && (
-                  <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 text-xs space-y-2">
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-xs space-y-2.5">
                     <div className="flex justify-between font-bold text-emerald-900 dark:text-emerald-300">
-                      <span>Live Wait: ~{msg.actionCard.data.estimatedWaitMinutes} mins</span>
-                      <span>{msg.actionCard.data.waitingCount} in line</span>
+                      <span>Live Waiting: ~{msg.actionCard.data.estimatedWaitMinutes} mins</span>
+                      <span>{msg.actionCard.data.waitingCount} groups waiting</span>
                     </div>
                     <button
                       onClick={() => store.setActiveQueueModal(true)}
-                      className="w-full py-2 rounded-xl bg-emerald-500 text-white font-bold text-xs"
+                      className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-sm flex items-center justify-center gap-1.5 transition-colors"
                     >
-                      <Ticket className="w-3.5 h-3.5 inline mr-1" /> Get Queue Token
+                      <Ticket className="w-4 h-4" /> Get Live Queue Pass
                     </button>
+                  </div>
+                )}
+
+                {/* 5. Location Info Card */}
+                {msg.actionCard.type === 'LOCATION_INFO' && (
+                  <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-800/60 text-xs space-y-2">
+                    <div className="flex items-center gap-1.5 font-bold text-blue-900 dark:text-blue-300">
+                      <MapPin className="w-4 h-4 text-blue-600" />
+                      <span>{msg.actionCard.data.name}</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-300">{msg.actionCard.data.address}</p>
+                    <div className="flex justify-between text-[10px] text-zinc-500 dark:text-zinc-400 pt-1">
+                      <span>📞 {msg.actionCard.data.phone}</span>
+                      <span>⏰ {msg.actionCard.data.openingTime} - {msg.actionCard.data.closingTime}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. Offers Info Card */}
+                {msg.actionCard.type === 'OFFERS_INFO' && (
+                  <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-xs space-y-2">
+                    {msg.actionCard.data.offers.map((offer: any, i: number) => (
+                      <div key={i} className="flex justify-between items-center p-2 rounded-xl bg-white dark:bg-zinc-800 border border-amber-200 dark:border-amber-900/50">
+                        <div>
+                          <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-xs">{offer.code}</span>
+                          <p className="text-[10px] text-zinc-500 dark:text-zinc-400">{offer.title}</p>
+                        </div>
+                        <button
+                          onClick={() => handleSendMessage(`Book table using code ${offer.code}`)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500 text-white font-bold text-[10px] hover:bg-amber-600"
+                        >
+                          Use Code
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -209,42 +443,83 @@ export default function AIAssistantModal() {
         ))}
 
         {isTyping && (
-          <div className="flex items-center gap-1.5 text-zinc-400 text-xs italic p-2">
-            <Sparkles className="w-3.5 h-3.5 animate-spin text-amber-500" />
-            AI is checking table availability...
+          <div className="flex items-center gap-2 text-zinc-400 text-xs p-2">
+            <Sparkles className="w-4 h-4 animate-spin text-amber-500" />
+            <span>AI is analyzing table availability & NLP context...</span>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick Prompts Pills */}
-      <div className="px-3 py-2 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-        {quickPrompts.map((prompt, i) => (
-          <button
-            key={i}
-            onClick={() => handleSendMessage(prompt)}
-            className="px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-bold whitespace-nowrap hover:bg-amber-100 dark:hover:bg-amber-950/40 hover:text-amber-600 transition-colors"
-          >
-            {prompt}
-          </button>
-        ))}
+      {/* Category Pills & Quick Prompts */}
+      <div className="bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800">
+        {/* Category Tabs */}
+        <div className="flex items-center gap-1.5 px-3 pt-2 overflow-x-auto scrollbar-none">
+          {promptCategories.map((cat) => {
+            const Icon = cat.icon;
+            const isSel = activeCategory === cat.name;
+            return (
+              <button
+                key={cat.name}
+                onClick={() => setActiveCategory(cat.name)}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
+                  isSel
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                {cat.name}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Quick Prompts Chips */}
+        <div className="px-3 py-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          {(quickPrompts[activeCategory] || quickPrompts.All).map((prompt, i) => (
+            <button
+              key={i}
+              onClick={() => handleSendMessage(prompt)}
+              className="px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-[10px] font-semibold whitespace-nowrap hover:bg-amber-100 dark:hover:bg-amber-950/40 hover:text-amber-600 transition-colors"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Input Bar */}
+      {/* Chat Input Bar */}
       <div className="p-3 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 flex items-center gap-2">
+        {/* Voice Input Button */}
+        <button
+          onClick={toggleVoiceInput}
+          className={`p-2.5 rounded-xl border transition-colors ${
+            isListening
+              ? 'bg-rose-500 text-white border-rose-600 animate-pulse'
+              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-200'
+          }`}
+          title={isListening ? 'Listening... Speak now!' : 'Click to Speak (Voice Query)'}
+        >
+          {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+        </button>
+
+        {/* Text Input */}
         <input
           type="text"
-          placeholder="Ask AI to book a table, check queue..."
+          placeholder={isListening ? 'Listening to your voice...' : 'Type in English or Hinglish...'}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSendMessage();
           }}
-          className="flex-1 px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+          className="flex-1 px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
         />
+
+        {/* Send Button */}
         <button
           onClick={() => handleSendMessage()}
-          className="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-transform active:scale-95 shadow-md shadow-amber-500/20"
+          className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold transition-transform active:scale-95 shadow-md shadow-amber-500/20"
         >
           <Send className="w-4 h-4" />
         </button>

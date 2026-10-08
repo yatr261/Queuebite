@@ -1,5 +1,4 @@
-import { Restaurant, Table, MenuItem, DailySpecial, Reservation, QueueToken, WaitlistEntry, KitchenTicket, NotificationItem } from './types';
-import { getTodayDateString } from './utils';
+import { Restaurant, Table, MenuItem, Reservation, QueueToken, WaitlistEntry, KitchenTicket, NotificationItem } from './types';
 
 export const INITIAL_TABLES: Table[] = [
   {
@@ -380,39 +379,6 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
         minOrder: 600,
       },
     ],
-    acceptedPaymentMethods: ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'],
-    dailySpecials: [
-      {
-        id: 'special-1',
-        date: getTodayDateString(),
-        menuItemId: 'menu-1',
-        name: 'Paneer Tikka Angara (Special)',
-        category: 'Starters',
-        price: 190,
-        description: 'Smoky, fiery cottage cheese cubes marinated in special tandoori spices, charcoal grilled. Today at 15% discount!',
-        image: 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=500&auto=format&fit=crop&q=80',
-        dietary: 'VEG',
-        spiceLevel: 'Spicy',
-        prepTimeMinutes: 12,
-        isPopular: true,
-        calories: 320,
-        discountNote: '15% OFF Monsoon Deal',
-      },
-      {
-        id: 'special-2',
-        date: getTodayDateString(),
-        name: 'Monsoon Special Mango Kulfi',
-        category: 'Desserts',
-        price: 99,
-        description: 'Creamy artisanal mango kulfi served with saffron rabri and pistachios. Chef Recommended!',
-        image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=500&auto=format&fit=crop&q=80',
-        dietary: 'VEG',
-        prepTimeMinutes: 5,
-        isPopular: true,
-        calories: 250,
-        discountNote: "Chef's Special New Release!",
-      }
-    ],
   },
   {
     id: 'rest-2',
@@ -450,7 +416,6 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
         discountPercent: 15,
       },
     ],
-    acceptedPaymentMethods: ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'],
   },
   {
     id: 'rest-3',
@@ -487,7 +452,6 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
         discountPercent: 10,
       },
     ],
-    acceptedPaymentMethods: ['UPI', 'CARD', 'NETBANKING', 'CASH_AT_DESK'],
   },
 ];
 
@@ -502,7 +466,7 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
     restaurantName: 'Spice Garden',
     tableId: 'tbl-3',
     tableNumber: 'T-3',
-    date: getTodayDateString(),
+    date: '2026-08-16',
     startTime: '19:30',
     endTime: '21:00',
     guestCount: 4,
@@ -538,7 +502,7 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
     restaurantName: 'Spice Garden',
     tableId: 'tbl-8',
     tableNumber: 'T-8',
-    date: getTodayDateString(),
+    date: '2026-08-16',
     startTime: '20:00',
     endTime: '21:30',
     guestCount: 2,
@@ -572,7 +536,7 @@ export const INITIAL_RESERVATIONS: Reservation[] = [
     restaurantName: 'Spice Garden',
     tableId: 'tbl-4',
     tableNumber: 'T-4',
-    date: getTodayDateString(),
+    date: '2026-08-16',
     startTime: '13:00',
     endTime: '14:30',
     guestCount: 4,
@@ -637,7 +601,7 @@ export const INITIAL_WAITLIST: WaitlistEntry[] = [
     customerPhone: '+91 98220 33445',
     customerEmail: 'sanjay.d@example.com',
     guestCount: 6,
-    preferredDate: getTodayDateString(),
+    preferredDate: '2026-08-16',
     preferredTime: '20:30',
     tablePreference: 'OUTDOOR',
     status: 'WAITING',

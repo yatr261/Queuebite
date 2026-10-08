@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import { UtensilsCrossed, ShieldCheck, Sparkles, Heart } from 'lucide-react';
 
 export default function Footer() {
@@ -20,7 +19,7 @@ export default function Footer() {
               </span>
             </div>
             <p className="text-xs text-zinc-500 max-w-sm leading-relaxed">
-              Smart Queue, Pre-Booking & Pre-Ordering System for modern restaurants, cafes, and food courts. Skip the wait, guarantee your table, and savor your meal faster.
+              AI Smart Queue, Pre-Booking & Pre-Ordering System for modern restaurants, cafes, and food courts. Skip the wait, guarantee your table, and savor your meal faster.
             </p>
           </div>
 
@@ -30,7 +29,7 @@ export default function Footer() {
               Features
             </p>
             <ul className="space-y-1.5 text-zinc-500">
-              <li>Smart Table Allocation</li>
+              <li>AI Smart Table Allocation</li>
               <li>Food Pre-Ordering & Kitchen KDS</li>
               <li>Digital QR Booking Pass</li>
               <li>Live Walk-In Queue & Tokens</li>
@@ -53,15 +52,7 @@ export default function Footer() {
         </div>
 
         <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-400">
-          <p>
-            © 2026 Queuebite Ecosystem. All rights reserved. •{' '}
-            <Link
-              href="/admin"
-              className="text-zinc-500 hover:text-amber-500 font-semibold transition-colors"
-            >
-              Admin Portal
-            </Link>
-          </p>
+          <p>© 2026 Queuebite Ecosystem. All rights reserved.</p>
           <div className="flex items-center gap-1">
             <span>Built with precision & high-performance design</span>
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />

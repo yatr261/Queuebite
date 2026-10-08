@@ -56,7 +56,7 @@ export default function KitchenKDS() {
           {['ALL', 'SCHEDULED', 'COOKING', 'READY', 'SERVED'].map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f as typeof filter)}
+              onClick={() => setFilter(f as any)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                 filter === f
                   ? 'bg-amber-500 text-white shadow'
