@@ -18,6 +18,7 @@ import {
   MapPin,
   ShieldAlert,
   SwitchCamera,
+  FileImage,
 } from 'lucide-react';
 
 export type ScanVerificationResult =
@@ -31,6 +32,8 @@ export default function StaffQRScanner() {
   const [state, setState] = useState<AppState>(store.getState());
   const [scanResult, setScanResult] = useState<ScanVerificationResult | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isProcessingUpload, setIsProcessingUpload] = useState<boolean>(false);
   const [isScanningActive, setIsScanningActive] = useState<boolean>(true);
   const [manualInput, setManualInput] = useState<string>('');
   const [availableCameras, setAvailableCameras] = useState<Array<{ id: string; label: string }>>([]);
@@ -40,6 +43,7 @@ export default function StaffQRScanner() {
   const isProcessingRef = useRef<boolean>(false);
   const isCameraRunningRef = useRef<boolean>(false);
   const isInitializingRef = useRef<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const readerDivId = 'queuebite-qr-reader';
 
@@ -91,7 +95,7 @@ export default function StaffQRScanner() {
     };
   }, []);
 
-  // UNIFIED VERIFICATION PIPELINE (Single handler for Camera QR Scan & Manual Booking ID)
+  // UNIFIED VERIFICATION PIPELINE (Single handler for Camera QR Scan, Photo Upload, & Manual Booking ID)
   const verifyAndCheckInBooking = useCallback((payload: string) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -309,10 +313,50 @@ export default function StaffQRScanner() {
     }
   }, [isScanningActive, scanResult, selectedCameraId, startCameraScanner, stopCameraScanner]);
 
+  // PHOTO / GALLERY QR FILE UPLOAD DECODER
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadError(null);
+    setIsProcessingUpload(true);
+
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode');
+      const tempScanner = new Html5Qrcode(readerDivId);
+
+      try {
+        const decodedText = await tempScanner.scanFile(file, false);
+        tempScanner.clear();
+        setIsProcessingUpload(false);
+        verifyAndCheckInBooking(decodedText);
+      } catch {
+        try {
+          tempScanner.clear();
+        } catch {
+          // ignore
+        }
+        setIsProcessingUpload(false);
+        setUploadError(
+          "QR code could not be detected. Please select a clear image containing the customer's QueueBite booking QR."
+        );
+      }
+    } catch {
+      setIsProcessingUpload(false);
+      setUploadError('Failed to process image file. Please select a valid photo.');
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   const handleResetScan = () => {
     isProcessingRef.current = false;
     setScanResult(null);
     setCameraError(null);
+    setUploadError(null);
+    setIsProcessingUpload(false);
     setManualInput('');
     setIsScanningActive(true);
   };
@@ -452,6 +496,50 @@ export default function StaffQRScanner() {
               </button>
             </div>
           )}
+
+          {/* Action Divider OR */}
+          <div className="flex items-center gap-4 max-w-md mx-auto">
+            <div className="flex-1 h-px bg-zinc-800" />
+            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">OR</span>
+            <div className="flex-1 h-px bg-zinc-800" />
+          </div>
+
+          {/* PHOTO / GALLERY QR UPLOAD BUTTON */}
+          <div className="max-w-md mx-auto space-y-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+              id="qr-photo-upload-input"
+            />
+            <button
+              type="button"
+              disabled={isProcessingUpload}
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-3 px-4 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-purple-500/50 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2.5 group cursor-pointer disabled:opacity-50"
+            >
+              {isProcessingUpload ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  <span>Scanning Photo for QR...</span>
+                </>
+              ) : (
+                <>
+                  <FileImage className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+                  <span>🖼️ Upload QR from Photos / Gallery</span>
+                </>
+              )}
+            </button>
+
+            {uploadError && (
+              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs font-medium flex items-start gap-2 animate-in fade-in duration-200">
+                <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <p className="flex-1 text-left">{uploadError}</p>
+              </div>
+            )}
+          </div>
 
           {/* Action Divider OR */}
           <div className="flex items-center gap-4 max-w-md mx-auto">
