@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { store, AppState } from '@/lib/store';
-import { processUserChatMessage } from '@/lib/aiChatEngine';
 import { formatDate, formatTime12h, formatCurrency } from '@/lib/utils';
 import {
   Bot,
@@ -20,10 +19,9 @@ import {
   Trash2,
   MapPin,
   Tag,
-  Phone,
-  MessageSquare,
   ChevronRight,
   Zap,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function AIAssistantModal() {
@@ -33,6 +31,7 @@ export default function AIAssistantModal() {
   const [isListening, setIsListening] = useState<boolean>(false);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(false);
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [apiError, setApiError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
@@ -55,7 +54,7 @@ export default function AIAssistantModal() {
         const rec = new SpeechRecognition();
         rec.continuous = false;
         rec.interimResults = false;
-        rec.lang = 'en-IN'; // Works great for English & Hinglish accents
+        rec.lang = 'en-IN'; // Multi-accent English & Hinglish support
 
         rec.onresult = (event: any) => {
           const transcript = event.results[0][0].transcript;
@@ -93,7 +92,6 @@ export default function AIAssistantModal() {
 
   const speakText = (text: string) => {
     if (!ttsEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    // Strip markdown formatting for speech
     const cleanText = text.replace(/[*_~`#•]/g, '').replace(/\[(.*?)\]\(.*?\)/g, '$1');
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(cleanText);
@@ -102,11 +100,13 @@ export default function AIAssistantModal() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string) => {
     const query = textToSend || input;
-    if (!query.trim()) return;
+    if (!query.trim() || isTyping) return;
 
-    // Add user message
+    setApiError(null);
+
+    // 1. Append user message
     store.addChatMessage({
       sender: 'user',
       text: query,
@@ -114,16 +114,58 @@ export default function AIAssistantModal() {
     setInput('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      const response = processUserChatMessage(query);
+    const currentRestaurant =
+      state.restaurants.find((r) => r.id === state.selectedRestaurantId) || state.restaurants[0];
+
+    try {
+      // 2. Call server-side API route for secure context-aware response
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userQuery: query,
+          messages: state.chatMessages,
+          restaurantContext: {
+            name: currentRestaurant.name,
+            address: currentRestaurant.address,
+            phone: currentRestaurant.phone,
+            openingTime: currentRestaurant.openingTime,
+            closingTime: currentRestaurant.closingTime,
+            cuisines: currentRestaurant.cuisines,
+            menu: currentRestaurant.menu,
+          },
+          userReservationsContext: state.reservations.map((r) => ({
+            id: r.reservationId,
+            date: r.date,
+            time: r.startTime,
+            guests: r.guestCount,
+            status: r.bookingStatus,
+            tableNumber: r.tableNumber,
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+
+      const data = await res.json();
       store.addChatMessage({
         sender: 'assistant',
-        text: response.text,
-        actionCard: response.actionCard,
+        text: data.text || "I'm not able to find that information right now. You can check the restaurant details or contact the restaurant directly.",
+        actionCard: data.actionCard,
       });
+      speakText(data.text);
+    } catch (err) {
+      setApiError('Unable to connect to assistant service. Showing offline helper response.');
+      // Graceful offline fallback
+      store.addChatMessage({
+        sender: 'assistant',
+        text: "I'm here to help! You can ask me about table bookings, live queue wait times, menu recommendations, active promo codes, or booking cancellations.",
+      });
+    } finally {
       setIsTyping(false);
-      speakText(response.text);
-    }, 400);
+    }
   };
 
   const handleQuickConfirmBooking = (cardData: any) => {
@@ -159,26 +201,27 @@ export default function AIAssistantModal() {
   const quickPrompts: Record<string, string[]> = {
     All: [
       'Book a table for 4 tomorrow at 8 PM',
-      '4 log ke liye aaj shaam 8 baje table',
       'What is the live wait time right now?',
       'Recommend top vegetarian starters',
+      'How does QR check-in work?',
       'Any active discount coupons?',
     ],
     Booking: [
       'Book an outdoor table for 2 at 7:30 PM',
       'Do you have a window table for lunch?',
       '4 guests table for Sunday dinner',
-      'Reserve a VIP lounge table for 6',
+      'Where can I see my booking?',
     ],
     Queue: [
       'What is the current walk-in queue wait time?',
-      'Kitni waiting hai abhi?',
+      'How does the walk-in queue work?',
       'Generate a live queue token for 3 guests',
     ],
     Menu: [
       'Recommend chef special dishes',
       'What are the best vegetarian options?',
-      'Show popular starters with prices',
+      'Which items are non-spicy?',
+      'Can I pre-order food with my table?',
     ],
     Offers: [
       'Show available discount coupons',
@@ -187,10 +230,9 @@ export default function AIAssistantModal() {
     ],
   };
 
-  // Render text with basic markdown styling (bold, linebreaks)
+  // Render text with basic markdown styling (bold, linebreaks, inline code)
   const renderFormattedText = (text: string) => {
     return text.split('\n').map((line, idx) => {
-      // Process bold syntax **text**
       const parts = line.split(/(\*\*.*?\*\*|\`.*?\`)/g);
       return (
         <span key={idx} className="block min-h-[1.25em]">
@@ -223,14 +265,14 @@ export default function AIAssistantModal() {
         {/* Tooltip Badge */}
         <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-zinc-900/90 text-white text-xs font-semibold shadow-xl border border-zinc-800 backdrop-blur-md animate-in fade-in slide-in-from-right-4 duration-300">
           <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-          <span>Ask AI to book a table!</span>
+          <span>Ask QueueBite Assistant!</span>
         </div>
 
         {/* Floating Action Button */}
         <button
           onClick={() => store.setAiChatOpen(true)}
           className="relative group p-4 rounded-full bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 text-white shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 border-2 border-white/20"
-          title="Open AI Concierge Chatbot"
+          title="Open QueueBite Assistant"
         >
           <Bot className="w-6 h-6 text-white group-hover:rotate-12 transition-transform" />
           <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-white dark:border-zinc-900 animate-ping" />
@@ -251,12 +293,12 @@ export default function AIAssistantModal() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-extrabold tracking-tight">Queuebite AI Chatbot</h3>
+              <h3 className="text-sm font-extrabold tracking-tight">QueueBite Assistant</h3>
               <span className="px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 text-[9px] font-bold uppercase tracking-wider border border-emerald-400/30 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live NLP
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Online
               </span>
             </div>
-            <p className="text-[10px] text-amber-100">English & Hinglish Smart Concierge</p>
+            <p className="text-[10px] text-amber-100">How can I help you today?</p>
           </div>
         </div>
 
@@ -445,9 +487,17 @@ export default function AIAssistantModal() {
         {isTyping && (
           <div className="flex items-center gap-2 text-zinc-400 text-xs p-2">
             <Sparkles className="w-4 h-4 animate-spin text-amber-500" />
-            <span>AI is analyzing table availability & NLP context...</span>
+            <span>QueueBite Assistant is thinking...</span>
           </div>
         )}
+
+        {apiError && (
+          <div className="flex items-center gap-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-[11px] text-rose-600 dark:text-rose-400">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{apiError}</span>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -507,19 +557,21 @@ export default function AIAssistantModal() {
         {/* Text Input */}
         <input
           type="text"
-          placeholder={isListening ? 'Listening to your voice...' : 'Type in English or Hinglish...'}
+          placeholder={isListening ? 'Listening to your voice...' : 'Ask anything about QueueBite...'}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSendMessage();
           }}
-          className="flex-1 px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+          disabled={isTyping}
+          className="flex-1 px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-60"
         />
 
         {/* Send Button */}
         <button
           onClick={() => handleSendMessage()}
-          className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold transition-transform active:scale-95 shadow-md shadow-amber-500/20"
+          disabled={isTyping || !input.trim()}
+          className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold transition-transform active:scale-95 shadow-md shadow-amber-500/20 disabled:opacity-50 disabled:pointer-events-none"
         >
           <Send className="w-4 h-4" />
         </button>
